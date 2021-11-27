@@ -1,11 +1,7 @@
 import { Client as DiscordClient, Intents } from "discord.js";
-import * as botConf from "./botconf.json";
 
-interface BotConf {
-  discord: {
-    token: string;
-  };
-}
+import { BotConf } from "./defs";
+import * as botConf from "./botconf.json";
 
 (async () => {
   const client = new DiscordClient({ intents: [Intents.FLAGS.GUILDS] });
