@@ -10,3 +10,4 @@ lib
 .pnp.*
 
 **/*.code-workspace
+**/botconf.json
