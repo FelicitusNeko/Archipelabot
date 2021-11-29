@@ -7,6 +7,7 @@ import {
   ReactionCollector,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
+import { userMention } from "@discordjs/builders";
 
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
@@ -28,16 +29,15 @@ export class Archipelabot {
   private client: DiscordClient;
   private cmds: Command[];
 
-  private recruit?: GameRecruitmentProcess;
+  private recruit: Record<string, GameRecruitmentProcess>;
 
-  private _clientId: string;
   public get clientId(): string {
-    return this._clientId;
+    return this.client && this.client.user ? this.client.user.id : "";
   }
 
   constructor(client: DiscordClient) {
     this.client = client;
-    this._clientId = '';
+    this.recruit = {};
 
     this.cmds = [
       {
@@ -76,7 +76,6 @@ export class Archipelabot {
     this.client.once("ready", () => {
       console.log(`${client.user?.username} is online`);
       client.application?.commands.set(this.cmds);
-      if (this.client.user) this._clientId = this.client.user.id;
     });
 
     client.on("interactionCreate", async (interaction: Interaction) => {
@@ -105,125 +104,138 @@ export class Archipelabot {
     });
   }
 
-  cmdAPGame = async (_client: DiscordClient, interaction: BaseCommandInteraction) => {
-    switch (interaction.options.get("subcommand", true).value as string) {
-      case "start":
-        if (this.recruit) {
-          await interaction.followUp({
-            ephemeral: true,
-            content: "There is already a game being organized!",
-          });
-          this.recruit.msg.reply({
-            content: "Here's where that lives.",
-          });
-        } else {
-          this.recruit = {
-            msg: (await interaction.followUp({
+  cmdAPGame = async (
+    _client: DiscordClient,
+    interaction: BaseCommandInteraction
+  ) => {
+    if (!interaction.guild || !interaction.channel) {
+      await interaction.followUp({
+        ephemeral: true,
+        content:
+          "A game currently can only be organized in a text channel of a server.",
+      });
+    } else {
+      const { guildId, channelId } = interaction;
+      switch (interaction.options.get("subcommand", true).value as string) {
+        case "start":
+          {
+            if (this.recruit[guildId]) {
+              await interaction.followUp(
+                "There is already a game being organized!"
+              );
+              this.recruit[guildId].msg.reply("Here's where that lives.");
+            } else {
+              const newRecruit: GameRecruitmentProcess = {
+                msg: (await interaction.followUp(
+                  "This is the message people would react to if they were playing."
+                )) as Message,
+                guildId,
+                channelId,
+                startingUser: interaction.user.id,
+                reactedUsers: [],
+              };
+              this.recruit[guildId] = newRecruit;
+
+              newRecruit.msg.react("⚔️");
+              newRecruit.reactionCollector =
+                newRecruit.msg.createReactionCollector({
+                  filter: (reaction, user) =>
+                    this.clientId !== user.id && reaction.emoji.name === "⚔️",
+                  dispose: true,
+                });
+
+              const { reactionCollector } = newRecruit;
+              reactionCollector.on("collect", (reaction, user) => {
+                if (newRecruit && reaction.emoji.name === "⚔️")
+                  newRecruit.reactedUsers.push(user.id);
+              });
+              reactionCollector.on("remove", (reaction, user) => {
+                if (newRecruit && reaction.emoji.name === "⚔️")
+                  newRecruit.reactedUsers = newRecruit.reactedUsers.filter(
+                    (i) => i != user.id
+                  );
+              });
+              reactionCollector.on("dispose", (reaction) => {
+                console.debug("Dispose:" /*, reaction*/);
+                if (newRecruit && reaction.emoji.name === "⚔️") {
+                  newRecruit.msg.react("⚔️");
+                  newRecruit.reactedUsers = [];
+                }
+              });
+              reactionCollector.on("end", async (_collected, reason) => {
+                if (["aplaunch", "apcancel"].includes(reason)) {
+                  console.debug(newRecruit.reactedUsers);
+                  await newRecruit.msg.delete();
+                  delete this.recruit[newRecruit.guildId];
+                }
+              });
+            }
+          }
+          break;
+
+        case "launch":
+          if (!this.recruit[guildId])
+            await interaction.followUp({
+              ephemeral: true,
+              content: "No game is currently being organized!",
+            });
+          else if (this.recruit[guildId].startingUser !== interaction.user.id)
+            await interaction.followUp({
+              ephemeral: true,
+              content: "You're not the person who launched this event!",
+            });
+          else if (this.recruit[guildId].reactedUsers.length === 0)
+            await interaction.followUp({
               ephemeral: true,
               content:
-                "This is the message people would react to if they were playing.",
-            })) as Message,
-            guildId: interaction.guildId,
-            channelId: interaction.channelId,
-            startingUser: interaction.user.id,
-            reactedUsers: [],
-          };
-
-          this.recruit.msg.react("⚔️");
-          this.recruit.reactionCollector =
-            this.recruit.msg.createReactionCollector({
-              filter: (reaction, user) => {
-                console.debug(this.clientId);
-                return this.clientId !== user.id && reaction.emoji.name === "⚔️"
-              }
+                "Nobody has signed up for this game yet! Either wait for signups or cancel.",
             });
+          else {
+            const { reactedUsers } = this.recruit[guildId];
+            this.recruit[guildId].reactionCollector?.stop("aplaunch");
 
-          const { reactionCollector } = this.recruit;
-          reactionCollector.on("collect", (reaction, user) => {
-            console.debug("Collect:" /*, reaction, user*/);
-            if (this.recruit && reaction.emoji.name === "⚔️")
-              this.recruit.reactedUsers.push(user.id);
-          });
-          reactionCollector.on("remove", (reaction, user) => {
-            console.debug("Remove:" /*, reaction, user*/);
-            if (this.recruit && reaction.emoji.name === "⚔️")
-              this.recruit.reactedUsers = this.recruit.reactedUsers.filter(
-                (i) => i != user.id
-              );
-          });
-          reactionCollector.on("dispose", (reaction) => {
-            console.debug("Dispose:" /*, reaction*/);
-            if (this.recruit && reaction.emoji.name === "⚔️") {
-              this.recruit.msg.react("⚔️");
-              this.recruit.reactedUsers = [];
-            }
-          });
-          reactionCollector.on("end", async (_collected, reason) => {
-            console.debug("End:"/*, collected, reason*/);
-            if (reason === "aplaunch") {
-              console.debug(this.recruit?.reactedUsers);
-              await this.recruit?.msg.delete();
-              this.recruit = undefined;
-            }
-          });
-        }
-        break;
+            await interaction.followUp(
+              "TEST: Game has started. Players: " +
+                reactedUsers.map((i) => userMention(i)).join(", ")
+            );
 
-      case "launch":
-        if (!this.recruit)
+            reactedUsers.forEach(i => {
+              const user = this.client.users.cache.get(i);
+              user?.send("Here's where you'd be sent your data file, if there is one for your game.");
+            })
+          }
+          break;
+
+        case "cancel":
+          if (!this.recruit)
+            await interaction.followUp({
+              ephemeral: true,
+              content: "No game is currently being organized!",
+            });
+          else if (this.recruit[guildId].startingUser !== interaction.user.id)
+            await interaction.followUp({
+              ephemeral: true,
+              content: "You're not the person who launched this event!",
+            });
+          else {
+            await interaction.followUp("The game has been cancelled.");
+            this.recruit[guildId].reactionCollector?.stop("apcancel");
+          }
+          break;
+
+        default:
+          console.warn(
+            "Unknown subcommand",
+            interaction.options.get("subcommand", true).value
+          );
           await interaction.followUp({
             ephemeral: true,
-            content: "No game is currently being organized!",
+            content:
+              "I don't recognize that subcommand. (valid options: start, launch, cancel)",
           });
-        else if (this.recruit.startingUser !== interaction.user.id)
-          await interaction.followUp({
-            ephemeral: true,
-            content: "You're not the person who launched this event!",
-          });
-        else {
-          const {reactedUsers} = this.recruit;
-          this.recruit.reactionCollector?.stop("aplaunch");
-
-          await interaction.followUp({
-            ephemeral: true,
-            content: "TEST: Game has started. Players: " + reactedUsers.join(', '),
-          });
-
-        }
-        break;
-
-      case "cancel":
-        if (!this.recruit)
-          await interaction.followUp({
-            ephemeral: true,
-            content: "No game is currently being organized!",
-          });
-        else if (this.recruit.startingUser !== interaction.user.id)
-          await interaction.followUp({
-            ephemeral: true,
-            content: "You're not the person who launched this event!",
-          });
-        else {
-          await interaction.followUp({
-            ephemeral: true,
-            content: "The game has been cancelled.",
-          });
-
-          this.recruit.reactionCollector?.stop("apcancel");
-        }
-        break;
-
-      default:
-        console.warn(
-          "Unknown subcommand",
-          interaction.options.get("subcommand", true).value
-        );
-        await interaction.followUp({
-          ephemeral: true,
-          content: "I don't recognize that subcommand. (valid options: start)",
-        });
+      }
     }
-  }
+  };
 
   /*
   async generateGame(channel: string, users: string[]) {
