@@ -1,13 +1,10 @@
 {
   "name": "archipelabot",
-  "packageManager": "yarn@3.1.1",
-  "dependencies": {
-    "@discordjs/builders": "^0.8.2",
-    "discord.js": "^13.3.1",
-    "tslint": "^6.1.3",
-    "typescript": "^4.5.2"
+  "version": "0.2",
+  "description": "Manages Archipelago instances and required YAML config files over Discord.",
+  "author": {
+    "name": "KewlioMZX"
   },
-  "version": "",
   "files": [
     "./bin/*",
     "./lib/*"
@@ -15,10 +12,17 @@
   "main": "./lib/index.js",
   "typings": "./lib/index.d.ts",
   "scripts": {
-    "start": "node ./lib/index.js",
+    "start": "node -r dotenv/config ./lib/index.js",
     "build": "tsc",
     "lint": "tslint -c tslint.json src/**/*.ts",
     "prepublish": "yarn build"
+  },
+  "dependencies": {
+    "@discordjs/builders": "^0.8.2",
+    "discord.js": "^13.3.1",
+    "dotenv": "^10.0.0",
+    "tslint": "^6.1.3",
+    "typescript": "^4.5.2"
   },
   "devDependencies": {
     "@types/eslint": "^8",
@@ -29,5 +33,6 @@
     "@yarnpkg/sdks": "^2.5.1-rc.4",
     "eslint": "^8.3.0",
     "prettier": "^2.5.0"
-  }
+  },
+  "packageManager": "yarn@3.1.1"
 }
