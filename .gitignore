@@ -9,5 +9,8 @@ lib
 !.yarn/versions
 .pnp.*
 
+yamls/
+
 **/*.code-workspace
 **/botconf.json
+.env

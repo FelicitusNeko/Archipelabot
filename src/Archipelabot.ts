@@ -9,6 +9,10 @@ import {
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
 
+import { get as httpsGet } from "https";
+import { existsSync, mkdirSync } from "fs";
+import { writeFile } from "fs/promises";
+
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 
@@ -24,6 +28,17 @@ interface GameRecruitmentProcess {
   reactionCollector?: ReactionCollector;
   reactedUsers: string[];
 }
+
+const getFile = (url: string) => {
+  return new Promise<string>((f, r) => {
+    httpsGet(url, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk.toString()));
+      res.on("close", () => f(data));
+      res.on("error", (e) => r(e));
+    });
+  });
+};
 
 export class Archipelabot {
   private client: DiscordClient;
@@ -45,6 +60,12 @@ export class Archipelabot {
         description: "Returns a greeting",
         type: "CHAT_INPUT",
         run: this.cmdHello,
+      },
+      {
+        name: "yaml",
+        description: "Manage YAML configuration files",
+        type: "CHAT_INPUT",
+        run: this.cmdYaml,
       },
       {
         name: "apgame",
@@ -78,7 +99,7 @@ export class Archipelabot {
       client.application?.commands.set(this.cmds);
     });
 
-    client.on("interactionCreate", async (interaction: Interaction) => {
+    this.client.on("interactionCreate", async (interaction: Interaction) => {
       if (interaction.isCommand() || interaction.isContextMenu()) {
         const slashCommand = this.cmds.find(
           (c) => c.name === interaction.commandName
@@ -90,11 +111,11 @@ export class Archipelabot {
 
         await interaction.deferReply();
 
-        slashCommand.run(client, interaction);
+        slashCommand.run(this.client, interaction);
       }
     });
 
-    client.login((botConf as BotConf).discord.token);
+    this.client.login((botConf as BotConf).discord.token);
   }
 
   async cmdHello(_client: DiscordClient, interaction: BaseCommandInteraction) {
@@ -103,6 +124,52 @@ export class Archipelabot {
       content: "Hello there!",
     });
   }
+
+  cmdYaml = async (
+    _client: DiscordClient,
+    interaction: BaseCommandInteraction
+  ) => {
+    const _msg = (await interaction.followUp({
+      ephemeral: true,
+      content: "Try replying to this message with an uploaded YAML file.",
+    })) as Message;
+
+    const msgCollector = interaction.channel?.createMessageCollector({
+      filter: (msg) =>
+        msg.type === "REPLY" &&
+        msg.reference?.messageId === _msg.id &&
+        msg.attachments.size > 0,
+      max: 1,
+      time: 60000,
+    });
+    msgCollector?.on("collect", (msg) => {
+      const yamls = msg.attachments.filter(
+        (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
+      );
+      if (yamls.size === 0) _msg.edit("That wasn't a YAML!");
+      else {
+        Promise.all(yamls.map((i) => getFile(i.url)))
+          .then(async (i) => {
+            _msg.edit("Thanks! Check debug info.");
+            if (!existsSync('./yamls')) mkdirSync('./yamls');
+            const userDir = `./yamls/${interaction.user.id}`
+            if (!existsSync(userDir)) mkdirSync(userDir);
+            for (const x in i) {
+              await writeFile(`${userDir}/${msg.id}-${x}.yaml`, i[x]);
+            }
+            console.debug(i);
+          })
+          .catch((e) => {
+            _msg.edit("An error occurred. Check debug log.");
+            console.error(e);
+          });
+      }
+    });
+    msgCollector?.on("end", (_collected, reason) => {
+      if (reason === "time") _msg.edit("Timed out.");
+      //else _msg.edit(`Check debug output. Reason: ${reason}`)
+    });
+  };
 
   cmdAPGame = async (
     _client: DiscordClient,
@@ -156,6 +223,7 @@ export class Archipelabot {
                   );
               });
               reactionCollector.on("dispose", (reaction) => {
+                // TODO: find out when this event fires (if it does)
                 console.debug("Dispose:" /*, reaction*/);
                 if (newRecruit && reaction.emoji.name === "⚔️") {
                   newRecruit.msg.react("⚔️");
@@ -199,10 +267,12 @@ export class Archipelabot {
                 reactedUsers.map((i) => userMention(i)).join(", ")
             );
 
-            reactedUsers.forEach(i => {
+            reactedUsers.forEach((i) => {
               const user = this.client.users.cache.get(i);
-              user?.send("Here's where you'd be sent your data file, if there is one for your game.");
-            })
+              user?.send(
+                "Here's where you'd be sent your data file, if there is one for your game."
+              );
+            });
           }
           break;
 
