@@ -115,6 +115,8 @@ export class Archipelabot {
       }
     });
 
+    if (!existsSync('./yamls')) mkdirSync('./yamls');
+
     this.client.login((botConf as BotConf).discord.token);
   }
 
@@ -151,7 +153,6 @@ export class Archipelabot {
         Promise.all(yamls.map((i) => getFile(i.url)))
           .then(async (i) => {
             _msg.edit("Thanks! Check debug info.");
-            if (!existsSync('./yamls')) mkdirSync('./yamls');
             const userDir = `./yamls/${interaction.user.id}`
             if (!existsSync(userDir)) mkdirSync(userDir);
             for (const x in i) {
