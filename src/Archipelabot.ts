@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
+import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
 import { existsSync, mkdirSync } from "fs";
@@ -15,6 +16,7 @@ import { writeFile } from "fs/promises";
 
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
+import * as gameList from "./gamelist.json";
 
 interface Command extends ChatInputApplicationCommandData {
   run: (client: DiscordClient, interaction: BaseCommandInteraction) => void;
@@ -38,6 +40,47 @@ const getFile = (url: string) => {
       res.on("error", (e) => r(e));
     });
   });
+};
+
+const quickValidateYaml = (data: string) => {
+  const gameListStr = gameList as string[];
+  try {
+    const yamlIn = YAML.parse(data);
+
+    if (!yamlIn.name) throw new Error("Name missing");
+    if (typeof yamlIn.name !== "string") throw new Error("Name not a string");
+    const name = (yamlIn.name as string).replace(
+      /\{[player|PLAYER|number|NUMBER]\}/,
+      "###"
+    );
+    if (name.length > 12) throw new Error("Name too long");
+    if (name.length === 0) throw new Error("Name is zero-length");
+
+    switch (typeof yamlIn.game) {
+      case "object":
+        for (const game of Object.keys(yamlIn.game as Record<string, number>)) {
+          if (!gameListStr.includes(game))
+            throw new Error(`Game ${game} not in valid game list`);
+          if ((yamlIn.game[game] as number) === 0) continue;
+          if (yamlIn[game] === undefined)
+            throw new Error(`Settings not defined for game ${game}`);
+        }
+        break;
+      case "string":
+        if (!gameListStr.includes(yamlIn.game))
+          throw new Error(`Game ${yamlIn.game} not in valid game list`);
+        if (yamlIn[yamlIn.game] === undefined)
+          throw new Error(`Settings not defined for game ${yamlIn.game}`);
+        break;
+      case "undefined":
+        throw new Error("No game defined");
+    }
+  } catch (e) {
+    console.error("Invalid YAML:", e);
+    return false;
+  }
+
+  return true;
 };
 
 export class Archipelabot {
@@ -115,7 +158,7 @@ export class Archipelabot {
       }
     });
 
-    if (!existsSync('./yamls')) mkdirSync('./yamls');
+    if (!existsSync("./yamls")) mkdirSync("./yamls");
 
     this.client.login((botConf as BotConf).discord.token);
   }
@@ -152,13 +195,19 @@ export class Archipelabot {
       else {
         Promise.all(yamls.map((i) => getFile(i.url)))
           .then(async (i) => {
-            _msg.edit("Thanks! Check debug info.");
-            const userDir = `./yamls/${interaction.user.id}`
+            const userDir = `./yamls/${interaction.user.id}`;
+            let addedCount = 0;
+
             if (!existsSync(userDir)) mkdirSync(userDir);
-            for (const x in i) {
-              await writeFile(`${userDir}/${msg.id}-${x}.yaml`, i[x]);
-            }
-            console.debug(i);
+            for (const x in i)
+              if (quickValidateYaml(i[x])) {
+                await writeFile(`${userDir}/${msg.id}-${x}.yaml`, i[x]);
+                addedCount++;
+              }
+              
+            _msg.edit(
+              `Thanks! Added ${addedCount} of ${i.length} YAMLs submitted. Check debug info.`
+            );
           })
           .catch((e) => {
             _msg.edit("An error occurred. Check debug log.");
