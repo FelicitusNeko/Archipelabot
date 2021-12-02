@@ -5,6 +5,11 @@ import {
   Interaction,
   Message,
   ReactionCollector,
+  MessageActionRow,
+  MessageSelectMenu,
+  MessageButton,
+  MessageSelectOptionData,
+  MessageEmbed,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
@@ -19,7 +24,7 @@ import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
 
 interface Command extends ChatInputApplicationCommandData {
-  run: (client: DiscordClient, interaction: BaseCommandInteraction) => void;
+  run: (interaction: BaseCommandInteraction) => void;
 }
 
 interface GameRecruitmentProcess {
@@ -42,6 +47,12 @@ const getFile = (url: string) => {
   });
 };
 
+interface yamlData {
+  error?: string;
+  desc?: string;
+  games?: string[];
+}
+
 const quickValidateYaml = (data: string) => {
   const gameListStr = gameList as string[];
   try {
@@ -56,14 +67,23 @@ const quickValidateYaml = (data: string) => {
     if (name.length > 12) throw new Error("Name too long");
     if (name.length === 0) throw new Error("Name is zero-length");
 
+    const retval: yamlData = {
+      desc: yamlIn.description,
+    };
+
     switch (typeof yamlIn.game) {
       case "object":
-        for (const game of Object.keys(yamlIn.game as Record<string, number>)) {
-          if (!gameListStr.includes(game))
-            throw new Error(`Game ${game} not in valid game list`);
-          if ((yamlIn.game[game] as number) === 0) continue;
-          if (yamlIn[game] === undefined)
-            throw new Error(`Settings not defined for game ${game}`);
+        {
+          const games = yamlIn.game as Record<string, number>;
+          for (const game of Object.keys(games)) {
+            if (!gameListStr.includes(game))
+              throw new Error(`Game ${game} not in valid game list`);
+            if ((yamlIn.game[game] as number) === 0) continue;
+            if (yamlIn[game] === undefined)
+              throw new Error(`Settings not defined for game ${game}`);
+          }
+
+          retval.games = Object.keys(games);
         }
         break;
       case "string":
@@ -71,16 +91,18 @@ const quickValidateYaml = (data: string) => {
           throw new Error(`Game ${yamlIn.game} not in valid game list`);
         if (yamlIn[yamlIn.game] === undefined)
           throw new Error(`Settings not defined for game ${yamlIn.game}`);
+
+        retval.games = [yamlIn.game as string];
         break;
       case "undefined":
         throw new Error("No game defined");
     }
+
+    return retval;
   } catch (e) {
     console.error("Invalid YAML:", e);
-    return false;
+    return { error: (e as Error).message } as yamlData;
   }
-
-  return true;
 };
 
 export class Archipelabot {
@@ -148,13 +170,14 @@ export class Archipelabot {
           (c) => c.name === interaction.commandName
         );
         if (!slashCommand) {
-          interaction.followUp({ content: "An error has occurred" });
+          interaction.followUp({
+            content: "Sorry, I don't recognize that command.",
+          });
           return;
         }
 
         await interaction.deferReply();
-
-        slashCommand.run(this.client, interaction);
+        slashCommand.run(interaction);
       }
     });
 
@@ -163,35 +186,75 @@ export class Archipelabot {
     this.client.login((botConf as BotConf).discord.token);
   }
 
-  async cmdHello(_client: DiscordClient, interaction: BaseCommandInteraction) {
+  async cmdHello(interaction: BaseCommandInteraction) {
     await interaction.followUp({
       ephemeral: true,
       content: "Hello there!",
     });
   }
 
-  cmdYaml = async (
-    _client: DiscordClient,
-    interaction: BaseCommandInteraction
-  ) => {
-    const _msg = (await interaction.followUp({
+  cmdYaml = async (interaction: BaseCommandInteraction) => {
+    console.debug(interaction.id);
+
+    const yamls: MessageSelectOptionData[] = [
+      {
+        label: "YAML 1",
+        description: "A Link to the Past, Factorio",
+        value: "123456789012345678/123456789012345678-1",
+        emoji: "⚔️",
+      },
+    ];
+    let currentYaml = -1;
+
+    const yamlRow = new MessageActionRow({
+      components: [
+        new MessageSelectMenu({
+          customId: "yaml",
+          placeholder: "Select a YAML",
+          options: yamls,
+        }),
+      ],
+    });
+    const buttonRow = new MessageActionRow({
+      components: [
+        new MessageButton({
+          customId: "backToYamlList",
+          label: "Back",
+          style: "SECONDARY",
+        }),
+        new MessageButton({
+          customId: "setDefaultYaml",
+          label: "Set Default",
+          style: "PRIMARY",
+        }),
+        new MessageButton({
+          customId: "deleteYaml",
+          label: "Delete",
+          style: "DANGER",
+        }),
+      ],
+    });
+
+    const msg = (await interaction.followUp({
       ephemeral: true,
-      content: "Try replying to this message with an uploaded YAML file.",
+      content: "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
+      components: [yamlRow],
     })) as Message;
+    console.log(msg.id);
 
     const msgCollector = interaction.channel?.createMessageCollector({
       filter: (msg) =>
         msg.type === "REPLY" &&
-        msg.reference?.messageId === _msg.id &&
+        msg.reference?.messageId === msg.id &&
         msg.attachments.size > 0,
       max: 1,
       time: 60000,
     });
-    msgCollector?.on("collect", (msg) => {
-      const yamls = msg.attachments.filter(
+    msgCollector?.on("collect", (msgIn) => {
+      const yamls = msgIn.attachments.filter(
         (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
       );
-      if (yamls.size === 0) _msg.edit("That wasn't a YAML!");
+      if (yamls.size === 0) msg.edit("That wasn't a YAML!");
       else {
         Promise.all(yamls.map((i) => getFile(i.url)))
           .then(async (i) => {
@@ -200,31 +263,83 @@ export class Archipelabot {
 
             if (!existsSync(userDir)) mkdirSync(userDir);
             for (const x in i)
-              if (quickValidateYaml(i[x])) {
-                await writeFile(`${userDir}/${msg.id}-${x}.yaml`, i[x]);
+              if (!quickValidateYaml(i[x]).error) {
+                await writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]);
                 addedCount++;
               }
-              
-            _msg.edit(
-              `Thanks! Added ${addedCount} of ${i.length} YAMLs submitted. Check debug info.`
+
+            msg.edit(
+              `Thanks! Added ${addedCount} valid YAML(s) of ${msgIn.attachments.size} file(s) submitted. Check debug info.`
             );
+
+            if (msgIn.deletable) msgIn.delete();
           })
           .catch((e) => {
-            _msg.edit("An error occurred. Check debug log.");
+            msg.edit("An error occurred. Check debug log.");
             console.error(e);
           });
       }
     });
     msgCollector?.on("end", (_collected, reason) => {
-      if (reason === "time") _msg.edit("Timed out.");
+      if (reason === "time") msg.edit({content: "Timed out.", embeds: [], components: []});
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
+
+    const subInteractionHandler = (subInt: Interaction) => {
+      if (!subInt.isSelectMenu() && !subInt.isButton()) return;
+      if (subInt.user.id !== interaction.user.id) return;
+      if (subInt.message.id !== msg.id) return;
+
+      if (subInt.isSelectMenu()) {
+        currentYaml = yamls.reduce(
+          (r, i, x) => (i.value === subInt.values[0] ? x : r),
+          -1
+        );
+        if (currentYaml < 0)
+          subInt.update({
+            content:
+              "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
+            embeds: [],
+            components: [yamlRow],
+          });
+        else
+          subInt.update({
+            content:
+              "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
+            embeds: [
+              new MessageEmbed({
+                title: "Current YAML:",
+                description: yamls[currentYaml].label ?? "Unknown",
+              }).addField("Games", yamls[currentYaml].description ?? "Unknown"),
+            ],
+            components: [buttonRow],
+          });
+      } else if (subInt.isButton()) {
+        switch (subInt.customId) {
+          case "backToYamlList":
+            subInt.update({
+              content:
+                "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
+              embeds: [],
+              components: [yamlRow],
+            });
+            break;
+
+          default:
+            subInt.update({
+              content: `You clicked the ${subInt.customId} button!`,
+            });
+        }
+      }
+
+      console.debug(subInt);
+    };
+
+    this.client.on("interactionCreate", subInteractionHandler);
+    //this.client.off('interactionCreate', subInteractionHandler);
   };
 
-  cmdAPGame = async (
-    _client: DiscordClient,
-    interaction: BaseCommandInteraction
-  ) => {
+  cmdAPGame = async (interaction: BaseCommandInteraction) => {
     if (!interaction.guild || !interaction.channel) {
       await interaction.followUp({
         ephemeral: true,
