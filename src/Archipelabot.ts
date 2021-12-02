@@ -237,7 +237,8 @@ export class Archipelabot {
 
     const msg = (await interaction.followUp({
       ephemeral: true,
-      content: "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
+      content:
+        "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       components: [yamlRow],
     })) as Message;
     console.log(msg.id);
@@ -281,7 +282,8 @@ export class Archipelabot {
       }
     });
     msgCollector?.on("end", (_collected, reason) => {
-      if (reason === "time") msg.edit({content: "Timed out.", embeds: [], components: []});
+      if (reason === "time")
+        msg.edit({ content: "Timed out.", embeds: [], components: [] });
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
 
@@ -308,9 +310,11 @@ export class Archipelabot {
               "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
             embeds: [
               new MessageEmbed({
-                title: "Current YAML:",
-                description: yamls[currentYaml].label ?? "Unknown",
-              }).addField("Games", yamls[currentYaml].description ?? "Unknown"),
+                title: yamls[currentYaml].label ?? "Unknown",
+                footer: userMention(subInt.user.id),
+              })
+                .addField("Games", yamls[currentYaml].description ?? "Unknown", true)
+                .addField("User", userMention(subInt.user.id), true),
             ],
             components: [buttonRow],
           });
