@@ -68,7 +68,7 @@ const quickValidateYaml = (data: string) => {
     if (name.length === 0) throw new Error("Name is zero-length");
 
     const retval: yamlData = {
-      desc: yamlIn.description,
+      desc: yamlIn.description ?? "No description",
     };
 
     switch (typeof yamlIn.game) {
@@ -164,22 +164,25 @@ export class Archipelabot {
       client.application?.commands.set(this.cmds);
     });
 
-    this.client.on("interactionCreate", async (interaction: DiscordInteraction) => {
-      if (interaction.isCommand() || interaction.isContextMenu()) {
-        const slashCommand = this.cmds.find(
-          (c) => c.name === interaction.commandName
-        );
-        if (!slashCommand) {
-          interaction.followUp({
-            content: "Sorry, I don't recognize that command.",
-          });
-          return;
-        }
+    this.client.on(
+      "interactionCreate",
+      async (interaction: DiscordInteraction) => {
+        if (interaction.isCommand() || interaction.isContextMenu()) {
+          const slashCommand = this.cmds.find(
+            (c) => c.name === interaction.commandName
+          );
+          if (!slashCommand) {
+            interaction.followUp({
+              content: "Sorry, I don't recognize that command.",
+            });
+            return;
+          }
 
-        await interaction.deferReply();
-        slashCommand.run(interaction);
+          await interaction.deferReply();
+          slashCommand.run(interaction);
+        }
       }
-    });
+    );
 
     if (!existsSync("./yamls")) mkdirSync("./yamls");
 
@@ -313,7 +316,11 @@ export class Archipelabot {
                 title: yamls[currentYaml].label ?? "Unknown",
                 footer: userMention(subInt.user.id),
               })
-                .addField("Games", yamls[currentYaml].description ?? "Unknown", true)
+                .addField(
+                  "Games",
+                  yamls[currentYaml].description ?? "Unknown",
+                  true
+                )
                 .addField("User", userMention(subInt.user.id), true),
             ],
             components: [buttonRow],
