@@ -183,6 +183,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/debug@npm:^4.1.7":
+  version: 4.1.7
+  resolution: "@types/debug@npm:4.1.7"
+  dependencies:
+    "@types/ms": "*"
+  checksum: 0a7b89d8ed72526858f0b61c6fd81f477853e8c4415bb97f48b1b5545248d2ae389931680b94b393b993a7cfe893537a200647d93defe6d87159b96812305adc
+  languageName: node
+  linkType: hard
+
 "@types/emscripten@npm:^1.38.0":
   version: 1.39.6
   resolution: "@types/emscripten@npm:1.39.6"
@@ -227,6 +236,13 @@ __metadata:
   dependencies:
     "@types/node": "*"
   checksum: b5f8aa592cc21c16d99e69aec0976f12b893b055e4456d90148a610a6b6088e297b2ba5f38f8c8280cef006cfd8f9ec99e069905020882619dc5fc8aa46f5f27
+  languageName: node
+  linkType: hard
+
+"@types/ms@npm:*":
+  version: 0.7.31
+  resolution: "@types/ms@npm:0.7.31"
+  checksum: daadd354aedde024cce6f5aa873fefe7b71b22cd0e28632a69e8b677aeb48ae8caa1c60e5919bb781df040d116b01cb4316335167a3fc0ef6a63fa3614c0f6da
   languageName: node
   linkType: hard
 
@@ -614,7 +630,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"any-promise@npm:^1.1.0, any-promise@npm:~1.3.0":
+"any-promise@npm:^1.1.0, any-promise@npm:^1.3.0, any-promise@npm:~1.3.0":
   version: 1.3.0
   resolution: "any-promise@npm:1.3.0"
   checksum: 0ee8a9bdbe882c90464d75d1f55cf027f5458650c4bd1f0467e65aec38ccccda07ca5844969ee77ed46d04e7dded3eaceb027e8d32f385688523fe305fa7e1de
@@ -637,6 +653,8 @@ __metadata:
     dotenv: ^10.0.0
     eslint: ^8.3.0
     prettier: ^2.5.0
+    sequelize: ^6.12.0-alpha.1
+    sqlite: ^4.0.23
     tslint: ^6.1.3
     typescript: ^4.5.2
     yaml: ^1.10.2
@@ -1033,6 +1051,13 @@ __metadata:
   version: 10.0.0
   resolution: "dotenv@npm:10.0.0"
   checksum: f412c5fe8c24fbe313d302d2500e247ba8a1946492db405a4de4d30dd0eb186a88a43f13c958c5a7de303938949c4231c56994f97d05c4bc1f22478d631b4005
+  languageName: node
+  linkType: hard
+
+"dottie@npm:^2.0.0":
+  version: 2.0.2
+  resolution: "dottie@npm:2.0.2"
+  checksum: 046a5818033725a5a12b60270473cd9a19b0e88bd007a0c9a66be36983e53626de949aee9d0290fbfe0275aa31837491adbbbb8bf74ef09f78d21598793d6268
   languageName: node
   linkType: hard
 
@@ -1542,6 +1567,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"inflection@npm:1.13.1":
+  version: 1.13.1
+  resolution: "inflection@npm:1.13.1"
+  checksum: 0ae265f710f61320306207501931fe4248dace8e841fb911a33625df68f611bc3736d9f03be5abc5351ae3698c7830e35c400a3a092cd68e93aa3d8cc01cb73a
+  languageName: node
+  linkType: hard
+
 "inflight@npm:^1.0.4":
   version: 1.0.6
   resolution: "inflight@npm:1.0.6"
@@ -1716,7 +1748,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lodash@npm:^4.17.15":
+"lodash@npm:^4.17.15, lodash@npm:^4.17.20":
   version: 4.17.21
   resolution: "lodash@npm:4.17.21"
   checksum: eb835a2e51d381e561e508ce932ea50a8e5a68f4ebdd771ea240d3048244a8d13658acbd502cd4829768c56f2e16bdd4340b9ea141297d472517b83868e677f7
@@ -1838,6 +1870,22 @@ __metadata:
   bin:
     mkdirp: bin/cmd.js
   checksum: a96865108c6c3b1b8e1d5e9f11843de1e077e57737602de1b82030815f311be11f96f09cce59bd5b903d0b29834733e5313f9301e3ed6d6f6fba2eae0df4298f
+  languageName: node
+  linkType: hard
+
+"moment-timezone@npm:^0.5.31":
+  version: 0.5.34
+  resolution: "moment-timezone@npm:0.5.34"
+  dependencies:
+    moment: ">= 2.9.0"
+  checksum: 12a1d3d52e4ba509cf1fa36bbda59d898a08fa80ab35f6c358747e93aec1f07e617cec647eaf2e8acf5f9132e581d4704d34a9edffa9a80c5cd04bf23b277595
+  languageName: node
+  linkType: hard
+
+"moment@npm:>= 2.9.0, moment@npm:^2.26.0":
+  version: 2.29.1
+  resolution: "moment@npm:2.29.1"
+  checksum: 1e14d5f422a2687996be11dd2d50c8de3bd577c4a4ca79ba5d02c397242a933e5b941655de6c8cb90ac18f01cc4127e55b4a12ae3c527a6c0a274e455979345e
   languageName: node
   linkType: hard
 
@@ -2032,6 +2080,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"pg-connection-string@npm:^2.5.0":
+  version: 2.5.0
+  resolution: "pg-connection-string@npm:2.5.0"
+  checksum: a6f3a068f7c9416a5b33a326811caf0dfaaee045c225b7c628b4c9b4e9a2b25bdd12a21e4c48940e1000ea223a4e608ca122d2ff3dd08c8b1db0fc9f5705133a
+  languageName: node
+  linkType: hard
+
 "picomatch@npm:^2.2.3":
   version: 2.3.0
   resolution: "picomatch@npm:2.3.0"
@@ -2206,6 +2261,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"retry-as-promised@npm:^3.2.0":
+  version: 3.2.0
+  resolution: "retry-as-promised@npm:3.2.0"
+  dependencies:
+    any-promise: ^1.3.0
+  checksum: 282aa6fc2896e31d4ec7253ac1d0f1d6a67bf40b699d8f5d7d4b27707c1901272866d981480cd9730ad27583341052632207371a3cde23b6324525389316855e
+  languageName: node
+  linkType: hard
+
 "reusify@npm:^1.0.4":
   version: 1.0.4
   resolution: "reusify@npm:1.0.4"
@@ -2249,7 +2313,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"semver@npm:^7.1.2, semver@npm:^7.2.1, semver@npm:^7.3.5":
+"semver@npm:^7.1.2, semver@npm:^7.2.1, semver@npm:^7.3.2, semver@npm:^7.3.5":
   version: 7.3.5
   resolution: "semver@npm:7.3.5"
   dependencies:
@@ -2257,6 +2321,49 @@ __metadata:
   bin:
     semver: bin/semver.js
   checksum: 5eafe6102bea2a7439897c1856362e31cc348ccf96efd455c8b5bc2c61e6f7e7b8250dc26b8828c1d76a56f818a7ee907a36ae9fb37a599d3d24609207001d60
+  languageName: node
+  linkType: hard
+
+"sequelize-pool@npm:^6.0.0":
+  version: 6.1.0
+  resolution: "sequelize-pool@npm:6.1.0"
+  checksum: a6e3311c8b37927fcc9e5491844e430f061f5b9f04a598f0778ae38cbe61f59ae4643283d877ab8d3e86e34a8aa75c6bd4f4a4aa774b47e1b4a643f6bfb3795a
+  languageName: node
+  linkType: hard
+
+"sequelize@npm:^6.12.0-alpha.1":
+  version: 6.12.0-alpha.1
+  resolution: "sequelize@npm:6.12.0-alpha.1"
+  dependencies:
+    "@types/debug": ^4.1.7
+    debug: ^4.1.1
+    dottie: ^2.0.0
+    inflection: 1.13.1
+    lodash: ^4.17.20
+    moment: ^2.26.0
+    moment-timezone: ^0.5.31
+    pg-connection-string: ^2.5.0
+    retry-as-promised: ^3.2.0
+    semver: ^7.3.2
+    sequelize-pool: ^6.0.0
+    toposort-class: ^1.0.1
+    uuid: ^8.1.0
+    validator: ^13.7.0
+    wkx: ^0.5.0
+  peerDependenciesMeta:
+    mariadb:
+      optional: true
+    mysql2:
+      optional: true
+    pg:
+      optional: true
+    pg-hstore:
+      optional: true
+    sqlite3:
+      optional: true
+    tedious:
+      optional: true
+  checksum: 27c7042a34de9275dcc35c14121f29e6a4a4e9fe56ebcd8767dae3e478ff88bdfb471154a9b36a09d5e79ac1a9586f844333d556c761566c5009a8d7688bc4e0
   languageName: node
   linkType: hard
 
@@ -2287,6 +2394,13 @@ __metadata:
   version: 1.0.3
   resolution: "sprintf-js@npm:1.0.3"
   checksum: 19d79aec211f09b99ec3099b5b2ae2f6e9cdefe50bc91ac4c69144b6d3928a640bb6ae5b3def70c2e85a2c3d9f5ec2719921e3a59d3ca3ef4b2fd1a4656a0df3
+  languageName: node
+  linkType: hard
+
+"sqlite@npm:^4.0.23":
+  version: 4.0.23
+  resolution: "sqlite@npm:4.0.23"
+  checksum: d241407f9d2fce6d571b5575c1a91e7e18fc2de345617f7e078956037ec99ad80ba27fc412adf71f7c60294feb771499ca440d3ae53a6cade1644081ff7a8ef0
   languageName: node
   linkType: hard
 
@@ -2387,6 +2501,13 @@ __metadata:
   dependencies:
     is-number: ^7.0.0
   checksum: f76fa01b3d5be85db6a2a143e24df9f60dd047d151062d0ba3df62953f2f697b16fe5dad9b0ac6191c7efc7b1d9dcaa4b768174b7b29da89d4428e64bc0a20ed
+  languageName: node
+  linkType: hard
+
+"toposort-class@npm:^1.0.1":
+  version: 1.0.1
+  resolution: "toposort-class@npm:1.0.1"
+  checksum: c5e3229d4899b23350b09ed26cfb7a28aadd0889550625f1bcadc0da266cdf2790fb0ccc3e92be93ba6ad64f57bc2fd1ab94446cb4ae83054dab263753157f5f
   languageName: node
   linkType: hard
 
@@ -2538,6 +2659,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"uuid@npm:^8.1.0":
+  version: 8.3.2
+  resolution: "uuid@npm:8.3.2"
+  bin:
+    uuid: dist/bin/uuid
+  checksum: 5575a8a75c13120e2f10e6ddc801b2c7ed7d8f3c8ac22c7ed0c7b2ba6383ec0abda88c905085d630e251719e0777045ae3236f04c812184b7c765f63a70e58df
+  languageName: node
+  linkType: hard
+
 "v8-compile-cache@npm:^2.0.3":
   version: 2.3.0
   resolution: "v8-compile-cache@npm:2.3.0"
@@ -2549,6 +2679,13 @@ __metadata:
   version: 1.0.0
   resolution: "vali-date@npm:1.0.0"
   checksum: 6464369cb77003a966591f2bd17b7c938c480956992e254b3455fd1651a3b7633e23aac8a03b974bbdfbd2357da52b98d46357bb6f292ffd28768a6d3959e61e
+  languageName: node
+  linkType: hard
+
+"validator@npm:^13.7.0":
+  version: 13.7.0
+  resolution: "validator@npm:13.7.0"
+  checksum: 2b83283de1222ca549a7ef57f46e8d49c6669213348db78b7045bce36a3b5843ff1e9f709ebf74574e06223461ee1f264f8cc9a26a0060a79a27de079d8286ef
   languageName: node
   linkType: hard
 
@@ -2577,6 +2714,15 @@ __metadata:
   bin:
     node-which: ./bin/node-which
   checksum: 1a5c563d3c1b52d5f893c8b61afe11abc3bab4afac492e8da5bde69d550de701cf9806235f20a47b5c8fa8a1d6a9135841de2596535e998027a54589000e66d1
+  languageName: node
+  linkType: hard
+
+"wkx@npm:^0.5.0":
+  version: 0.5.0
+  resolution: "wkx@npm:0.5.0"
+  dependencies:
+    "@types/node": "*"
+  checksum: 47b27387de81fbd077528c1c11be996bf5a6dbeb94858ea0e2fa6619c2af626aa2f127f6fee1b4b57057a7cbef8a810b39a67815f2eb54ed33b1790e29db86ee
   languageName: node
   linkType: hard
 
