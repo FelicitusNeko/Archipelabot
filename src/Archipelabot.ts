@@ -2,8 +2,8 @@ import {
   Client as DiscordClient,
   BaseCommandInteraction,
   ChatInputApplicationCommandData,
-  Interaction,
-  Message,
+  Interaction as DiscordInteraction,
+  Message as DiscordMessage,
   ReactionCollector,
   MessageActionRow,
   MessageSelectMenu,
@@ -28,7 +28,7 @@ interface Command extends ChatInputApplicationCommandData {
 }
 
 interface GameRecruitmentProcess {
-  msg: Message;
+  msg: DiscordMessage;
   guildId: string;
   channelId: string;
   startingUser: string;
@@ -64,7 +64,7 @@ const quickValidateYaml = (data: string) => {
       /\{[player|PLAYER|number|NUMBER]\}/,
       "###"
     );
-    if (name.length > 12) throw new Error("Name too long");
+    if (name.length > 16) throw new Error("Name too long");
     if (name.length === 0) throw new Error("Name is zero-length");
 
     const retval: yamlData = {
@@ -164,7 +164,7 @@ export class Archipelabot {
       client.application?.commands.set(this.cmds);
     });
 
-    this.client.on("interactionCreate", async (interaction: Interaction) => {
+    this.client.on("interactionCreate", async (interaction: DiscordInteraction) => {
       if (interaction.isCommand() || interaction.isContextMenu()) {
         const slashCommand = this.cmds.find(
           (c) => c.name === interaction.commandName
@@ -240,7 +240,7 @@ export class Archipelabot {
       content:
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       components: [yamlRow],
-    })) as Message;
+    })) as DiscordMessage;
     console.log(msg.id);
 
     const msgCollector = interaction.channel?.createMessageCollector({
@@ -287,7 +287,7 @@ export class Archipelabot {
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
 
-    const subInteractionHandler = (subInt: Interaction) => {
+    const subInteractionHandler = (subInt: DiscordInteraction) => {
       if (!subInt.isSelectMenu() && !subInt.isButton()) return;
       if (subInt.user.id !== interaction.user.id) return;
       if (subInt.message.id !== msg.id) return;
@@ -364,7 +364,7 @@ export class Archipelabot {
               const newRecruit: GameRecruitmentProcess = {
                 msg: (await interaction.followUp(
                   "This is the message people would react to if they were playing."
-                )) as Message,
+                )) as DiscordMessage,
                 guildId,
                 channelId,
                 startingUser: interaction.user.id,
