@@ -13,6 +13,7 @@ import {
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
+import { Sequelize } from "sequelize";
 import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
@@ -36,6 +37,12 @@ interface GameRecruitmentProcess {
   reactedUsers: string[];
 }
 
+interface yamlData {
+  error?: string;
+  desc?: string;
+  games?: string[];
+}
+
 const getFile = (url: string) => {
   return new Promise<string>((f, r) => {
     httpsGet(url, (res) => {
@@ -46,12 +53,6 @@ const getFile = (url: string) => {
     });
   });
 };
-
-interface yamlData {
-  error?: string;
-  desc?: string;
-  games?: string[];
-}
 
 const quickValidateYaml = (data: string) => {
   const gameListStr = gameList as string[];
@@ -105,9 +106,21 @@ const quickValidateYaml = (data: string) => {
   }
 };
 
+const generateLetterCode = (length = 4) => {
+  let retval = "";
+
+  for (let x = 0; x < length; x++)
+    retval += String.fromCharCode(
+      Math.floor(Math.random() * 26) + "A".charCodeAt(0)
+    );
+
+  return retval;
+};
+
 export class Archipelabot {
   private client: DiscordClient;
   private cmds: Command[];
+  private db: Sequelize;
 
   private recruit: Record<string, GameRecruitmentProcess>;
 
@@ -118,6 +131,8 @@ export class Archipelabot {
   constructor(client: DiscordClient) {
     this.client = client;
     this.recruit = {};
+    this.db = new Sequelize("sqlite::memory:");
+    this.db.close(); // just to shut up the build process for now
 
     this.cmds = [
       {
@@ -183,6 +198,8 @@ export class Archipelabot {
         }
       }
     );
+
+    
 
     if (!existsSync("./yamls")) mkdirSync("./yamls");
 
@@ -315,12 +332,19 @@ export class Archipelabot {
               new MessageEmbed({
                 title: yamls[currentYaml].label ?? "Unknown",
                 footer: userMention(subInt.user.id),
-              })
+                fields: [
+                  {
+                    name: 'Games',
+                    value: yamls[currentYaml].description ?? "Unknown",
+                    inline: true
+                  }
+                ]
+              })/*
                 .addField(
                   "Games",
                   yamls[currentYaml].description ?? "Unknown",
                   true
-                )
+                )*/
                 .addField("User", userMention(subInt.user.id), true),
             ],
             components: [buttonRow],
@@ -358,23 +382,34 @@ export class Archipelabot {
           "A game currently can only be organized in a text channel of a server.",
       });
     } else {
-      const { guildId, channelId } = interaction;
+      const { guildId, channelId, user: {id: startingUser} } = interaction;
       switch (interaction.options.get("subcommand", true).value as string) {
         case "start":
           {
             if (this.recruit[guildId]) {
               await interaction.followUp(
-                "There is already a game being organized!"
+                "There is already a game being organized on this server!"
               );
-              this.recruit[guildId].msg.reply("Here's where that lives.");
+              //this.recruit[guildId].msg.reply("Here's where that lives.");
             } else {
+              const gameCode = generateLetterCode();
               const newRecruit: GameRecruitmentProcess = {
-                msg: (await interaction.followUp(
-                  "This is the message people would react to if they were playing."
-                )) as DiscordMessage,
+                msg: (await interaction.followUp({
+                  content: `${userMention(startingUser)} is starting a game!`,
+                  embeds: [
+                    new MessageEmbed({
+                      title: "Multiworld Game Call",
+                      description:
+                        "React ⚔️ to join into this game with your default YAML.",
+                      footer: {
+                        text: `Game code: ${gameCode}`,
+                      },
+                    }),
+                  ],
+                })) as DiscordMessage,
                 guildId,
                 channelId,
-                startingUser: interaction.user.id,
+                startingUser,
                 reactedUsers: [],
               };
               this.recruit[guildId] = newRecruit;
@@ -423,7 +458,7 @@ export class Archipelabot {
               ephemeral: true,
               content: "No game is currently being organized!",
             });
-          else if (this.recruit[guildId].startingUser !== interaction.user.id)
+          else if (this.recruit[guildId].startingUser !== startingUser)
             await interaction.followUp({
               ephemeral: true,
               content: "You're not the person who launched this event!",
@@ -453,12 +488,12 @@ export class Archipelabot {
           break;
 
         case "cancel":
-          if (!this.recruit)
+          if (!this.recruit[guildId])
             await interaction.followUp({
               ephemeral: true,
               content: "No game is currently being organized!",
             });
-          else if (this.recruit[guildId].startingUser !== interaction.user.id)
+          else if (this.recruit[guildId].startingUser !== startingUser)
             await interaction.followUp({
               ephemeral: true,
               content: "You're not the person who launched this event!",
