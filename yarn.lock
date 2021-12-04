@@ -343,6 +343,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/validator@npm:^13.7.0":
+  version: 13.7.0
+  resolution: "@types/validator@npm:13.7.0"
+  checksum: 93b1ea1c24efc851db72f86da8e8cb85c16790ae9c6f8edc351048843224f3a2d3596fb8b207443d64300b88638d079f7da9b91a0d9b4426ef7f5f95189b7e85
+  languageName: node
+  linkType: hard
+
 "@types/ws@npm:^8.2.0":
   version: 8.2.0
   resolution: "@types/ws@npm:8.2.0"
@@ -747,6 +754,7 @@ __metadata:
     "@types/node": ^16.11.10
     "@types/prettier": ^2
     "@types/sqlite3": ^3.1.7
+    "@types/validator": ^13.7.0
     "@types/yaml": ^1
     "@typescript-eslint/eslint-plugin": ^5.4.0
     "@typescript-eslint/parser": ^5.4.0
