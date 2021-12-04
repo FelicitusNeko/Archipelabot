@@ -13,7 +13,7 @@ import {
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
-import { Sequelize } from "sequelize";
+//import { Sequelize } from "sequelize";
 import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
@@ -23,6 +23,7 @@ import { writeFile } from "fs/promises";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
+import { /*sequelize,*/ YamlTable } from "./Sequelize";
 
 interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
@@ -120,7 +121,7 @@ const generateLetterCode = (length = 4) => {
 export class Archipelabot {
   private client: DiscordClient;
   private cmds: Command[];
-  private db: Sequelize;
+  //private db: Sequelize;
 
   private recruit: Record<string, GameRecruitmentProcess>;
 
@@ -131,8 +132,7 @@ export class Archipelabot {
   constructor(client: DiscordClient) {
     this.client = client;
     this.recruit = {};
-    this.db = new Sequelize("sqlite::memory:");
-    this.db.close(); // just to shut up the build process for now
+    //this.db = sequelize;
 
     this.cmds = [
       {
@@ -199,8 +199,6 @@ export class Archipelabot {
       }
     );
 
-    
-
     if (!existsSync("./yamls")) mkdirSync("./yamls");
 
     this.client.login((botConf as BotConf).discord.token);
@@ -264,14 +262,15 @@ export class Archipelabot {
     console.log(msg.id);
 
     const msgCollector = interaction.channel?.createMessageCollector({
-      filter: (msg) =>
-        msg.type === "REPLY" &&
-        msg.reference?.messageId === msg.id &&
-        msg.attachments.size > 0,
+      filter: (msgIn) =>
+        msgIn.type === "REPLY" &&
+        msgIn.reference?.messageId === msg.id &&
+        msgIn.attachments.size > 0,
       max: 1,
       time: 60000,
     });
     msgCollector?.on("collect", (msgIn) => {
+      console.debug("Collect");
       const yamls = msgIn.attachments.filter(
         (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
       );
@@ -283,12 +282,22 @@ export class Archipelabot {
             let addedCount = 0;
 
             if (!existsSync(userDir)) mkdirSync(userDir);
-            for (const x in i)
-              if (!quickValidateYaml(i[x]).error) {
+            for (const x in i) {
+              const validate = quickValidateYaml(i[x]);
+              if (!validate.error) {
                 await writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]);
+                YamlTable.create({
+                  code: generateLetterCode(),
+                  userId: interaction.user.id,
+                  filename: `${msgIn.id}-${x}`,
+                  description: validate.desc ?? "No description provided",
+                  games: JSON.stringify(
+                    validate.games ?? ["A Link to the Past"]
+                  ),
+                });
                 addedCount++;
               }
-
+            }
             msg.edit(
               `Thanks! Added ${addedCount} valid YAML(s) of ${msgIn.attachments.size} file(s) submitted. Check debug info.`
             );
@@ -334,18 +343,17 @@ export class Archipelabot {
                 footer: userMention(subInt.user.id),
                 fields: [
                   {
-                    name: 'Games',
+                    name: "Games",
                     value: yamls[currentYaml].description ?? "Unknown",
-                    inline: true
-                  }
-                ]
-              })/*
-                .addField(
-                  "Games",
-                  yamls[currentYaml].description ?? "Unknown",
-                  true
-                )*/
-                .addField("User", userMention(subInt.user.id), true),
+                    inline: true,
+                  },
+                  {
+                    name: "User",
+                    value: userMention(subInt.user.id),
+                    inline: true,
+                  },
+                ],
+              }),
             ],
             components: [buttonRow],
           });
@@ -361,13 +369,13 @@ export class Archipelabot {
             break;
 
           default:
+            console.debug(subInt);
             subInt.update({
               content: `You clicked the ${subInt.customId} button!`,
             });
+            break;
         }
       }
-
-      console.debug(subInt);
     };
 
     this.client.on("interactionCreate", subInteractionHandler);
@@ -382,7 +390,11 @@ export class Archipelabot {
           "A game currently can only be organized in a text channel of a server.",
       });
     } else {
-      const { guildId, channelId, user: {id: startingUser} } = interaction;
+      const {
+        guildId,
+        channelId,
+        user: { id: startingUser },
+      } = interaction;
       switch (interaction.options.get("subcommand", true).value as string) {
         case "start":
           {
