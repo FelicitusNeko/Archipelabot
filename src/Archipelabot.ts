@@ -10,6 +10,8 @@ import {
   MessageButton,
   MessageSelectOptionData,
   MessageEmbed,
+  InteractionUpdateOptions,
+  InteractionReplyOptions,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
@@ -18,7 +20,7 @@ import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
 import { existsSync, mkdirSync } from "fs";
-import { writeFile } from "fs/promises";
+import { unlink, writeFile } from "fs/promises";
 
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
@@ -216,8 +218,10 @@ export class Archipelabot {
     } = interaction;
 
     const updateYamlList = async () => {
-      const playerEntry = await PlayerTable.findOne({ where: { userId } });
-      return YamlTable.findAll({ where: { userId } }).then((r) =>
+      const playerEntry =
+        (await PlayerTable.findOne({ where: { userId } })) ??
+        (await PlayerTable.create({ userId, defaultCode: null }));
+      const retval = await YamlTable.findAll({ where: { userId } }).then((r) =>
         r.map((i) => {
           return {
             label: i.description,
@@ -227,9 +231,42 @@ export class Archipelabot {
           } as MessageSelectOptionData;
         })
       );
+
+      return retval.length === 0
+        ? [
+            {
+              label: "No YAMLs",
+              value: "noyaml",
+            },
+          ]
+        : retval;
     };
 
-    let currentYaml: string | undefined = undefined;
+    let curEntry: YamlTable | null = null;
+    const generateCurEntryEmbed = (calledUser?: string) => {
+      if (!curEntry) return [];
+      else
+        return [
+          new MessageEmbed({
+            title: curEntry.description ?? "Unknown",
+            footer: userMention(calledUser ?? curEntry.userId),
+            fields: [
+              {
+                name: "Games",
+                value:
+                  (JSON.parse(curEntry.games) as string[]).join(", ") ??
+                  "Unknown",
+                inline: true,
+              },
+              {
+                name: "User",
+                value: userMention(curEntry.userId),
+                inline: true,
+              },
+            ],
+          }),
+        ];
+    };
 
     const yamlRow = new MessageActionRow({
       components: [
@@ -259,23 +296,28 @@ export class Archipelabot {
         }),
       ],
     });
-
-    const msg = (await interaction.followUp({
-      ephemeral: true,
+    const startingState: InteractionUpdateOptions = {
       content:
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
+      embeds: [],
       components: [yamlRow],
-    })) as DiscordMessage;
+    };
+
+    const msg = (await interaction.followUp(
+      Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
+        { ephemeral: true },
+        startingState
+      )
+    )) as DiscordMessage;
 
     const msgCollector = interaction.channel?.createMessageCollector({
       filter: (msgIn) =>
         msgIn.type === "REPLY" &&
         msgIn.reference?.messageId === msg.id &&
         msgIn.attachments.size > 0,
-      max: 1,
-      time: 60000,
     });
     msgCollector?.on("collect", (msgIn) => {
+      ResetTimeout();
       const yamls = msgIn.attachments.filter(
         (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
       );
@@ -284,28 +326,64 @@ export class Archipelabot {
         Promise.all(yamls.map((i) => getFile(i.url)))
           .then(async (i) => {
             const userDir = `./yamls/${userId}`;
-            let addedCount = 0;
-
-            if (!existsSync(userDir)) mkdirSync(userDir);
-            for (const x in i) {
-              const validate = quickValidateYaml(i[x]);
+            if (curEntry) {
+              const validate = quickValidateYaml(i[0]);
               if (!validate.error) {
-                await writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]);
-                YamlTable.create({
-                  code: generateLetterCode(),
-                  userId,
-                  filename: `${msgIn.id}-${x}`,
+                await writeFile(`${userDir}/${msgIn.id}-u.yaml`, i[0]);
+                const updateInfo = {
+                  filename: `${msgIn.id}-u`,
                   description: validate.desc ?? "No description provided",
                   games: JSON.stringify(
                     validate.games ?? ["A Link to the Past"]
                   ),
+                };
+
+                await YamlTable.update(updateInfo, {
+                  where: { code: curEntry.code },
                 });
-                addedCount++;
+
+                unlink(`${userDir}/${curEntry.filename}.yaml`);
+                curEntry = Object.assign<YamlTable, Partial<YamlTable>>(
+                  curEntry,
+                  updateInfo
+                );
+                msg.edit({
+                  content: `Thanks! YAML has been updated.`,
+                  embeds: generateCurEntryEmbed(userId),
+                });
+              } else {
+                msg.edit(
+                  "That doesn't look like a valid YAML. The entry was not updated."
+                );
               }
+            } else {
+              let addedCount = 0;
+
+              if (!existsSync(userDir)) mkdirSync(userDir);
+              for (const x in i) {
+                const validate = quickValidateYaml(i[x]);
+                if (!validate.error) {
+                  await writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]);
+                  YamlTable.create({
+                    code: generateLetterCode(),
+                    userId,
+                    filename: `${msgIn.id}-${x}`,
+                    description: validate.desc ?? "No description provided",
+                    games: JSON.stringify(
+                      validate.games ?? ["A Link to the Past"]
+                    ),
+                  });
+                  addedCount++;
+                }
+              }
+              (yamlRow.components[0] as MessageSelectMenu).setOptions(
+                await updateYamlList()
+              );
+              msg.edit({
+                content: `Thanks! Added ${addedCount} valid YAML(s) of ${msgIn.attachments.size} file(s) submitted.`,
+                components: [yamlRow],
+              });
             }
-            msg.edit(
-              `Thanks! Added ${addedCount} valid YAML(s) of ${msgIn.attachments.size} file(s) submitted. Check debug info.`
-            );
 
             if (msgIn.deletable) msgIn.delete();
           })
@@ -327,57 +405,103 @@ export class Archipelabot {
       if (subInt.message.id !== msg.id) return;
 
       if (subInt.isSelectMenu()) {
-        currentYaml = subInt.values[0];
-        const thisYaml = await YamlTable.findOne({
-          where: { code: currentYaml },
-        });
-
-        if (currentYaml === undefined || !thisYaml) {
-          currentYaml = undefined;
+        if (subInt.values[0] === "noyaml") {
           subInt.update({
             content:
-              "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
-            embeds: [],
-            components: [yamlRow],
+              "There are no YAMLs currently associated to you. Please provide one by replying to this message with it attached.",
           });
+          return;
+        }
+        curEntry = await YamlTable.findOne({
+          where: { code: subInt.values[0] },
+        });
+
+        if (!curEntry) {
+          subInt.update(startingState);
         } else {
           const playerEntry = await PlayerTable.findOne({ where: { userId } });
           (buttonRow.components[1] as MessageButton).disabled =
-            playerEntry?.defaultCode === currentYaml;
+            playerEntry?.defaultCode === curEntry.code;
           subInt.update({
             content:
               "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
-            embeds: [
-              new MessageEmbed({
-                title: thisYaml.description ?? "Unknown",
-                footer: userMention(subInt.user.id),
-                fields: [
-                  {
-                    name: "Games",
-                    value:
-                      (JSON.parse(thisYaml.games) as string[]).join(", ") ??
-                      "Unknown",
-                    inline: true,
-                  },
-                  {
-                    name: "User",
-                    value: userMention(subInt.user.id),
-                    inline: true,
-                  },
-                ],
-              }),
-            ],
+            embeds: generateCurEntryEmbed(subInt.user.id),
             components: [buttonRow],
           });
         }
-      } else if (subInt.isButton()) {
+      } else if (subInt.isButton() && curEntry) {
         switch (subInt.customId) {
           case "backToYamlList":
+            subInt.update(startingState);
+            break;
+
+          case "setDefaultYaml":
+            await PlayerTable.update(
+              { defaultCode: curEntry.code },
+              {
+                where: { userId: curEntry.userId },
+              }
+            );
+
+            (buttonRow.components[1] as MessageButton).disabled = true;
+            subInt.update({
+              content: "Your default YAML has been changed to this one.",
+              components: [buttonRow],
+            });
+            (yamlRow.components[0] as MessageSelectMenu).setOptions(
+              await updateYamlList()
+            );
+            break;
+
+          case "deleteYaml":
+            subInt.update({
+              content: "Are you sure you wish to delete this YAML?",
+              components: [
+                new MessageActionRow({
+                  components: [
+                    new MessageButton({
+                      customId: "deleteYamlYes",
+                      label: "Yes",
+                      style: "DANGER",
+                    }),
+                    new MessageButton({
+                      customId: "deleteYamlNo",
+                      label: "No",
+                      style: "SECONDARY",
+                    }),
+                  ],
+                }),
+              ],
+            });
+            break;
+
+          case "deleteYamlYes":
+            await YamlTable.destroy({ where: { code: curEntry.code } });
+
+            PlayerTable.update(
+              { defaultCode: null },
+              { where: { defaultCode: curEntry.code } }
+            ),
+              unlink(`./yamls/${curEntry.userId}/${curEntry.filename}.yaml`);
+            (yamlRow.components[0] as MessageSelectMenu).setOptions(
+              await updateYamlList()
+            );
+            subInt.update(
+              Object.assign<InteractionUpdateOptions, InteractionUpdateOptions>(
+                startingState,
+                {
+                  content:
+                    "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
+                }
+              )
+            );
+            break;
+
+          case "deleteYamlNo":
             subInt.update({
               content:
-                "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
-              embeds: [],
-              components: [yamlRow],
+                "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
+              components: [buttonRow],
             });
             break;
 
@@ -392,7 +516,16 @@ export class Archipelabot {
     };
 
     this.client.on("interactionCreate", subInteractionHandler);
-    //this.client.off('interactionCreate', subInteractionHandler);
+
+    let timeoutSignal: NodeJS.Timeout;
+    const Timeout = () => {
+      this.client.off("interactionCreate", subInteractionHandler);
+      msgCollector?.stop("time");
+    };
+    const ResetTimeout = () => {
+      if (timeoutSignal) clearTimeout(timeoutSignal);
+      timeoutSignal = setTimeout(Timeout, 180000);
+    };
   };
 
   cmdAPGame = async (interaction: BaseCommandInteraction) => {
