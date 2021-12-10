@@ -23,7 +23,7 @@ import { writeFile } from "fs/promises";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
-import { /*sequelize,*/ YamlTable } from "./Sequelize";
+import { /*sequelize,*/ PlayerTable, YamlTable } from "./Sequelize";
 
 interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
@@ -132,7 +132,6 @@ export class Archipelabot {
   constructor(client: DiscordClient) {
     this.client = client;
     this.recruit = {};
-    //this.db = sequelize;
 
     this.cmds = [
       {
@@ -212,24 +211,32 @@ export class Archipelabot {
   }
 
   cmdYaml = async (interaction: BaseCommandInteraction) => {
-    console.debug(interaction.id);
+    const {
+      user: { id: userId },
+    } = interaction;
 
-    const yamls: MessageSelectOptionData[] = [
-      {
-        label: "YAML 1",
-        description: "A Link to the Past, Factorio",
-        value: "123456789012345678/123456789012345678-1",
-        emoji: "⚔️",
-      },
-    ];
-    let currentYaml = -1;
+    const updateYamlList = async () => {
+      const playerEntry = await PlayerTable.findOne({ where: { userId } });
+      return YamlTable.findAll({ where: { userId } }).then((r) =>
+        r.map((i) => {
+          return {
+            label: i.description,
+            description: (JSON.parse(i.games) as string[]).join(", "),
+            value: i.code,
+            emoji: i.code === playerEntry?.defaultCode ? "⚔️" : undefined,
+          } as MessageSelectOptionData;
+        })
+      );
+    };
+
+    let currentYaml: string | undefined = undefined;
 
     const yamlRow = new MessageActionRow({
       components: [
         new MessageSelectMenu({
           customId: "yaml",
           placeholder: "Select a YAML",
-          options: yamls,
+          options: await updateYamlList(),
         }),
       ],
     });
@@ -259,7 +266,6 @@ export class Archipelabot {
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       components: [yamlRow],
     })) as DiscordMessage;
-    console.log(msg.id);
 
     const msgCollector = interaction.channel?.createMessageCollector({
       filter: (msgIn) =>
@@ -270,7 +276,6 @@ export class Archipelabot {
       time: 60000,
     });
     msgCollector?.on("collect", (msgIn) => {
-      console.debug("Collect");
       const yamls = msgIn.attachments.filter(
         (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
       );
@@ -278,7 +283,7 @@ export class Archipelabot {
       else {
         Promise.all(yamls.map((i) => getFile(i.url)))
           .then(async (i) => {
-            const userDir = `./yamls/${interaction.user.id}`;
+            const userDir = `./yamls/${userId}`;
             let addedCount = 0;
 
             if (!existsSync(userDir)) mkdirSync(userDir);
@@ -288,7 +293,7 @@ export class Archipelabot {
                 await writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]);
                 YamlTable.create({
                   code: generateLetterCode(),
-                  userId: interaction.user.id,
+                  userId,
                   filename: `${msgIn.id}-${x}`,
                   description: validate.desc ?? "No description provided",
                   games: JSON.stringify(
@@ -316,35 +321,42 @@ export class Archipelabot {
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
 
-    const subInteractionHandler = (subInt: DiscordInteraction) => {
+    const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isSelectMenu() && !subInt.isButton()) return;
-      if (subInt.user.id !== interaction.user.id) return;
+      if (subInt.user.id !== userId) return;
       if (subInt.message.id !== msg.id) return;
 
       if (subInt.isSelectMenu()) {
-        currentYaml = yamls.reduce(
-          (r, i, x) => (i.value === subInt.values[0] ? x : r),
-          -1
-        );
-        if (currentYaml < 0)
+        currentYaml = subInt.values[0];
+        const thisYaml = await YamlTable.findOne({
+          where: { code: currentYaml },
+        });
+
+        if (currentYaml === undefined || !thisYaml) {
+          currentYaml = undefined;
           subInt.update({
             content:
               "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
             embeds: [],
             components: [yamlRow],
           });
-        else
+        } else {
+          const playerEntry = await PlayerTable.findOne({ where: { userId } });
+          (buttonRow.components[1] as MessageButton).disabled =
+            playerEntry?.defaultCode === currentYaml;
           subInt.update({
             content:
               "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
             embeds: [
               new MessageEmbed({
-                title: yamls[currentYaml].label ?? "Unknown",
+                title: thisYaml.description ?? "Unknown",
                 footer: userMention(subInt.user.id),
                 fields: [
                   {
                     name: "Games",
-                    value: yamls[currentYaml].description ?? "Unknown",
+                    value:
+                      (JSON.parse(thisYaml.games) as string[]).join(", ") ??
+                      "Unknown",
                     inline: true,
                   },
                   {
@@ -357,6 +369,7 @@ export class Archipelabot {
             ],
             components: [buttonRow],
           });
+        }
       } else if (subInt.isButton()) {
         switch (subInt.customId) {
           case "backToYamlList":
