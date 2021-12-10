@@ -59,11 +59,11 @@ YamlTable.init(
 
 interface PlayerAttributes {
   userId: string;
-  defaultCode: string;
+  defaultCode: string | null;
 }
 class PlayerTable extends Model<PlayerAttributes, PlayerAttributes> {
   public userId!: string;
-  public defaultCode!: string;
+  public defaultCode!: string | null;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -80,7 +80,8 @@ PlayerTable.init(
     },
     defaultCode: {
       type: DataTypes.STRING(4),
-      allowNull: false,
+      allowNull: true,
+      defaultValue: null,
       validate: {
         is: /[A-Z]{4}/,
       },
