@@ -1,18 +1,4 @@
-// Copyright 2021 FelicitusNeko
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-import { Sequelize, ModelDefined, DataTypes } from "sequelize";
+import { Sequelize, DataTypes, Model } from "sequelize";
 
 const sequelize = new Sequelize("sqlite::memory:");
 
@@ -23,71 +9,88 @@ interface YamlAttributes {
   description: string;
   games: string;
 }
-const YamlTable: ModelDefined<YamlAttributes, YamlAttributes> =
-  sequelize.define(
-    "Yaml",
-    {
-      code: {
-        type: DataTypes.STRING(4),
-        primaryKey: true,
-        validate: {
-          is: /[A-Z]{4}/,
-        },
-      },
-      userId: {
-        type: DataTypes.STRING(20),
-        allowNull: false,
-        validate: {
-          isNumeric: true,
-          len: [16, 20],
-        },
-      },
-      filename: {
-        type: DataTypes.STRING(64),
-        allowNull: false,
-      },
-      description: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        defaultValue: "No description provided",
-      },
-      games: {
-        type: DataTypes.JSON,
-        allowNull: false,
-        defaultValue: ["A Link to the Past"],
+class YamlTable extends Model<YamlAttributes, YamlAttributes> {
+  public code!: string;
+  public userId!: string;
+  public filename!: string;
+  public description!: string;
+  public games!: string;
+
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+YamlTable.init(
+  {
+    code: {
+      type: DataTypes.STRING(4),
+      primaryKey: true,
+      validate: {
+        is: /[A-Z]{4}/,
       },
     },
-    {
-      tableName: "yaml",
-    }
-  );
+    userId: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      validate: {
+        isNumeric: true,
+        len: [16, 20],
+      },
+    },
+    filename: {
+      type: DataTypes.STRING(64),
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+      defaultValue: "No description provided",
+    },
+    games: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: ["A Link to the Past"],
+    },
+  },
+  {
+    sequelize,
+    tableName: "yaml",
+  }
+);
 
 interface PlayerAttributes {
   userId: string;
   defaultCode: string;
 }
-const PlayerTable: ModelDefined<PlayerAttributes, PlayerAttributes> =
-  sequelize.define(
-    "Player",
-    {
-      userId: {
-        type: DataTypes.STRING(20),
-        primaryKey: true,
-        validate: {
-          isNumeric: true,
-          len: [16, 20],
-        },
-      },
-      defaultCode: {
-        type: DataTypes.STRING(4),
-        allowNull: false,
-        validate: {
-          is: /[A-Z]{4}/,
-        },
+class PlayerTable extends Model<PlayerAttributes, PlayerAttributes> {
+  public userId!: string;
+  public defaultCode!: string;
+
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+PlayerTable.init(
+  {
+    userId: {
+      type: DataTypes.STRING(20),
+      primaryKey: true,
+      validate: {
+        isNumeric: true,
+        len: [16, 20],
       },
     },
-    { tableName: "players" }
-  );
+    defaultCode: {
+      type: DataTypes.STRING(4),
+      allowNull: false,
+      validate: {
+        is: /[A-Z]{4}/,
+      },
+    },
+  },
+  {
+    sequelize,
+    tableName: "players",
+  }
+);
 
 interface GameAttributes {
   code: string;
@@ -95,43 +98,51 @@ interface GameAttributes {
   userId: string;
   active: boolean;
 }
-const GameTable: ModelDefined<GameAttributes, GameAttributes> =
-  sequelize.define(
-    "Game",
-    {
-      code: {
-        type: DataTypes.STRING(4),
-        primaryKey: true,
-        validate: {
-          is: /[A-Z]{4}/,
-        },
-      },
-      guildId: {
-        type: DataTypes.STRING(20),
-        allowNull: false,
-        validate: {
-          isNumeric: true,
-          len: [16, 20],
-        },
-      },
-      userId: {
-        type: DataTypes.STRING(20),
-        allowNull: false,
-        validate: {
-          isNumeric: true,
-          len: [16, 20],
-        },
-      },
-      active: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: true,
+class GameTable extends Model<GameAttributes, GameAttributes> {
+  public code!: string;
+  public guildId!: string;
+  public userId!: string;
+  public active!: boolean;
+
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+GameTable.init(
+  {
+    code: {
+      type: DataTypes.STRING(4),
+      primaryKey: true,
+      validate: {
+        is: /[A-Z]{4}/,
       },
     },
-    {
-      tableName: "games",
-    }
-  );
+    guildId: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      validate: {
+        isNumeric: true,
+        len: [16, 20],
+      },
+    },
+    userId: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      validate: {
+        isNumeric: true,
+        len: [16, 20],
+      },
+    },
+    active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+  },
+  {
+    sequelize,
+    tableName: "games",
+  }
+);
 
 sequelize.sync();
 
