@@ -687,75 +687,74 @@ export class Archipelabot {
     })) as DiscordMessage;
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
-      if (!subInt.isSelectMenu() && !subInt.isButton()) return;
+      if (!subInt.isButton()) return;
       if (subInt.user.id !== receivingUser.id) return;
       if (subInt.message.id !== msg.id) return;
 
-      if (subInt.isButton()) {
-        let dismissListener = true;
-        switch (subInt.customId) {
-          case "accept":
-          case "acceptAsDefault":
-            {
-              const code = generateLetterCode(
-                (await YamlTable.findAll()).map((i) => i.code)
+      let dismissListener = true;
+      switch (subInt.customId) {
+        case "accept":
+        case "acceptAsDefault":
+          {
+            const code = generateLetterCode(
+              (await YamlTable.findAll()).map((i) => i.code)
+            );
+            // Create player entry if it doesn't exist
+            (await PlayerTable.findOne({
+              where: { userId: receivingUser.id },
+            })) ??
+              (await PlayerTable.create({
+                userId: receivingUser.id,
+                defaultCode: null,
+              }));
+            await Promise.all([
+              writeFile(
+                `./yamls/${receivingUser.id}/${msg.id}.yaml`,
+                yamlData.data
+              ),
+              YamlTable.create({
+                code,
+                userId: receivingUser.id,
+                filename: `${msg.id}`,
+                description: yamlData.desc ?? "No description provided",
+                games: JSON.stringify(yamlData.games ?? ["A Link to the Past"]),
+              }),
+            ]);
+
+            if (subInt.customId === "acceptAsDefault")
+              PlayerTable.update(
+                { defaultCode: code },
+                { where: { userId: receivingUser.id } }
               );
-              // Create player entry if it doesn't exist
-              (await PlayerTable.findOne({
-                where: { userId: receivingUser.id },
-              })) ??
-                (await PlayerTable.create({
-                  userId: receivingUser.id,
-                  defaultCode: null,
-                }));
-              await Promise.all([
-                writeFile(
-                  `./yamls/${receivingUser.id}/${msg.id}.yaml`,
-                  yamlData.data
-                ),
-                YamlTable.create({
-                  code,
-                  userId: receivingUser.id,
-                  filename: `${msg.id}`,
-                  description: yamlData.desc ?? "No description provided",
-                  games: JSON.stringify(
-                    yamlData.games ?? ["A Link to the Past"]
-                  ),
-                }),
-              ]);
 
-              if (subInt.customId === "acceptAsDefault")
-                PlayerTable.update(
-                  { defaultCode: code },
-                  { where: { userId: receivingUser.id } }
-                );
-
-              subInt.update({
-                content: `Okay, the YAML has been added to your collection${
-                  subInt.customId === "acceptAsDefault"
-                    ? " and assigned as your default YAML"
-                    : ""
-                }.`,
-                components: [],
-              });
-            }
-            break;
-
-          case "reject":
             subInt.update({
-              content: "Okay, the YAML has not been added to your collection.",
+              content: `Okay, the YAML has been added to your collection${
+                subInt.customId === "acceptAsDefault"
+                  ? " and assigned as your default YAML"
+                  : ""
+              }.`,
               components: [],
             });
-            break;
+          }
+          break;
 
-          default:
-            dismissListener = false;
-            break;
-        }
+        case "reject":
+          subInt.update({
+            content: "Okay, the YAML has not been added to your collection.",
+            components: [],
+          });
+          break;
 
-        if (dismissListener)
-          this.client.off("interactionCreate", subInteractionHandler);
+        default:
+          subInt.update({
+            content: `Something weird happened. customId: ${subInt.customId}`,
+          });
+          dismissListener = false;
+          break;
       }
+
+      if (dismissListener)
+        this.client.off("interactionCreate", subInteractionHandler);
       // Not sure why this is detecting as an unused variable; it's definitely not, we're using it *right now*
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       this.client.on("interactionCreate", subInteractionHandler);
