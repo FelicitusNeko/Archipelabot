@@ -7,6 +7,7 @@ interface YamlAttributes {
   userId: string;
   filename: string;
   description: string;
+  playerName: string;
   games: string;
 }
 class YamlTable extends Model<YamlAttributes, YamlAttributes> {
@@ -14,6 +15,7 @@ class YamlTable extends Model<YamlAttributes, YamlAttributes> {
   public userId!: string;
   public filename!: string;
   public description!: string;
+  public playerName!: string;
   public games!: string;
 
   public readonly createdAt!: Date;
@@ -44,6 +46,10 @@ YamlTable.init(
       type: DataTypes.STRING(255),
       allowNull: false,
       defaultValue: "No description provided",
+    },
+    playerName: {
+      type: DataTypes.STRING(16),
+      allowNull: false,
     },
     games: {
       type: DataTypes.JSON,
@@ -97,12 +103,14 @@ interface GameAttributes {
   code: string;
   guildId: string;
   userId: string;
+  filename: string;
   active: boolean;
 }
 class GameTable extends Model<GameAttributes, GameAttributes> {
   public code!: string;
   public guildId!: string;
   public userId!: string;
+  public filename!: string;
   public active!: boolean;
 
   public readonly createdAt!: Date;
@@ -132,6 +140,10 @@ GameTable.init(
         isNumeric: true,
         len: [16, 20],
       },
+    },
+    filename: {
+      type: DataTypes.STRING(64),
+      allowNull: false
     },
     active: {
       type: DataTypes.BOOLEAN,
