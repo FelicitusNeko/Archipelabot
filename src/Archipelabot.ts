@@ -2,6 +2,7 @@ import {
   Client as DiscordClient,
   Message as DiscordMessage,
   Interaction as DiscordInteraction,
+  User as DiscordUser,
   BaseCommandInteraction,
   ChatInputApplicationCommandData,
   ReactionCollector,
@@ -12,26 +13,34 @@ import {
   MessageEmbed,
   InteractionUpdateOptions,
   InteractionReplyOptions,
-  //MessageAttachment,
-  User as DiscordUser,
+  MessageAttachment,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
 //import { Sequelize } from "sequelize";
+import { Op } from "sequelize/dist";
 import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
 import { existsSync, mkdirSync } from "fs";
-import { unlink, writeFile } from "fs/promises";
+import { copyFile, readdir, unlink, writeFile } from "fs/promises";
 
+import { /*sequelize,*/ GameTable, PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
-import { /*sequelize,*/ PlayerTable, YamlTable } from "./Sequelize";
+import { join as pathJoin } from "path";
+import { spawn } from "child_process";
 
 interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
 }
+
+// enum GameState {
+//   Assembling,
+//   Running,
+//   Stopped,
+// }
 
 interface GameRecruitmentProcess {
   msg: DiscordMessage;
@@ -42,10 +51,20 @@ interface GameRecruitmentProcess {
   reactedUsers: string[];
 }
 
+// interface RunningGame {
+//   msg: DiscordMessage;
+//   guildId: string;
+//   channelId: string;
+//   startingUser: string;
+//   playingUsers: string[];
+//   state: GameState;
+// }
+
 interface YamlData {
   error?: string;
-  desc?: string;
   games?: string[];
+  name?: string[];
+  desc?: string;
   data: string;
 }
 
@@ -65,17 +84,31 @@ const quickValidateYaml = (data: string) => {
   try {
     const yamlIn = YAML.parse(data);
 
-    if (!yamlIn.name) throw new Error("Name missing");
-    if (typeof yamlIn.name !== "string") throw new Error("Name not a string");
-    const name = (yamlIn.name as string).replace(
-      /\{[player|PLAYER|number|NUMBER]\}/,
-      "###"
-    );
-    if (name.length > 16) throw new Error("Name too long");
-    if (name.length === 0) throw new Error("Name is zero-length");
+    const ValidateName = (name: string) => {
+      const parsedName = name.replace(
+        /\{[player|PLAYER|number|NUMBER]\}/,
+        "###"
+      );
+      if (parsedName.length > 16) throw new Error("Name too long");
+      if (parsedName.length === 0) throw new Error("Name is zero-length");
+      return parsedName;
+    };
+
+    let nameList: string[] = [];
+    switch (typeof yamlIn.name) {
+      case "object":
+        nameList = Object.keys(yamlIn.name).map(ValidateName);
+        break;
+      case "string":
+        nameList.push(ValidateName(yamlIn.name));
+        break;
+      case "undefined":
+        throw new Error("Name missing");
+    }
 
     const retval: YamlData = {
       desc: yamlIn.description ?? "No description",
+      name: nameList,
       data,
     };
 
@@ -141,7 +174,8 @@ export class Archipelabot {
   private cmds: Command[];
   //private db: Sequelize;
 
-  private recruit: Record<string, GameRecruitmentProcess>;
+  private recruit: Record<string, GameRecruitmentProcess> = {};
+  //private running: Record<string, RunningGame> = {};
 
   public get clientId(): string {
     return this.client && this.client.user ? this.client.user.id : "";
@@ -149,7 +183,6 @@ export class Archipelabot {
 
   constructor(client: DiscordClient) {
     this.client = client;
-    this.recruit = {};
 
     this.cmds = [
       {
@@ -364,6 +397,7 @@ export class Archipelabot {
             .then(async (i) => {
               const userDir = `./yamls/${userId}`;
               if (curEntry) {
+                // Edit an existing YAML
                 const validate = quickValidateYaml(i[0]);
                 if (!validate.error) {
                   await writeFile(`${userDir}/${msgIn.id}-u.yaml`, i[0]);
@@ -394,9 +428,10 @@ export class Archipelabot {
                   );
                 }
               } else {
-                const usedCodes = (await YamlTable.findAll()).map(
-                  (i) => i.code
-                );
+                // Add a new YAML
+                const usedCodes = (
+                  await YamlTable.findAll({ attributes: ["code"] })
+                ).map((i) => i.code);
                 let addedCount = 0;
 
                 if (!existsSync(userDir)) mkdirSync(userDir);
@@ -411,6 +446,7 @@ export class Archipelabot {
                         userId,
                         filename: `${msgIn.id}-${x}`,
                         description: validate.desc ?? "No description provided",
+                        playerName: JSON.stringify(validate.name ?? ["Who?"]),
                         games: JSON.stringify(
                           validate.games ?? ["A Link to the Past"]
                         ),
@@ -588,7 +624,7 @@ export class Archipelabot {
             )}. Please reply to this message with the YAML you wish to assign.`,
           })) as DiscordMessage;
 
-          console.debug(interaction);
+          //console.debug(interaction);
           const msgCollector = interaction.channel?.createMessageCollector({
             filter: (msgIn) =>
               msgIn.type === "REPLY" &&
@@ -614,7 +650,8 @@ export class Archipelabot {
                     this.sendYamlForApproval(
                       sendingUser,
                       targetUser.user,
-                      validate
+                      validate,
+                      yamls.first()
                     );
                   } else {
                     msg.edit(
@@ -654,15 +691,16 @@ export class Archipelabot {
   async sendYamlForApproval(
     sendingUser: string,
     receivingUser: DiscordUser | undefined,
-    yamlData: YamlData
+    yamlData: YamlData,
+    yamlAttach?: MessageAttachment
   ) {
-    if (!receivingUser) return;
-    //const user = this.client.users.cache.get(receivingUser);
+    if (!receivingUser || !yamlAttach) return;
+
     const msg = (await receivingUser.send({
       content: `${userMention(
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
-      //attachments: [new MessageAttachment(Buffer.from(yamlData.data), "Received.yaml")],
+      attachments: [yamlAttach],
       components: [
         new MessageActionRow({
           components: [
@@ -688,7 +726,13 @@ export class Archipelabot {
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isButton()) return;
+      // console.debug(
+      //   subInt.user.id,
+      //   receivingUser.id,
+      //   subInt.user.id !== receivingUser.id
+      // );
       if (subInt.user.id !== receivingUser.id) return;
+      // console.debug(subInt.message.id, msg.id, subInt.message.id !== msg.id);
       if (subInt.message.id !== msg.id) return;
 
       let dismissListener = true;
@@ -697,7 +741,9 @@ export class Archipelabot {
         case "acceptAsDefault":
           {
             const code = generateLetterCode(
-              (await YamlTable.findAll()).map((i) => i.code)
+              (await YamlTable.findAll({ attributes: ["code"] })).map(
+                (i) => i.code
+              )
             );
             // Create player entry if it doesn't exist
             (await PlayerTable.findOne({
@@ -717,6 +763,7 @@ export class Archipelabot {
                 userId: receivingUser.id,
                 filename: `${msg.id}`,
                 description: yamlData.desc ?? "No description provided",
+                playerName: JSON.stringify(yamlData.name ?? ["Who?"]),
                 games: JSON.stringify(yamlData.games ?? ["A Link to the Past"]),
               }),
             ]);
@@ -734,6 +781,7 @@ export class Archipelabot {
                   : ""
               }.`,
               components: [],
+              embeds: [],
             });
           }
           break;
@@ -755,10 +803,8 @@ export class Archipelabot {
 
       if (dismissListener)
         this.client.off("interactionCreate", subInteractionHandler);
-      // Not sure why this is detecting as an unused variable; it's definitely not, we're using it *right now*
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      this.client.on("interactionCreate", subInteractionHandler);
     };
+    this.client.on("interactionCreate", subInteractionHandler);
   }
 
   cmdAPGame = async (interaction: BaseCommandInteraction) => {
@@ -784,48 +830,53 @@ export class Archipelabot {
                 );
                 //this.recruit[guildId].msg.reply("Here's where that lives.");
               } else {
-                const gameCode = generateLetterCode();
+                const gameCode = generateLetterCode(
+                  (await GameTable.findAll({ attributes: ["code"] })).map(
+                    (i) => i.code
+                  )
+                );
+                const msg = (await interaction.followUp({
+                  content: `${userMention(startingUser)} is starting a game!`,
+                  embeds: [
+                    new MessageEmbed({
+                      title: "Multiworld Game Call",
+                      description:
+                        "React ⚔️ to join into this game with your default YAML.\n" +
+                        "Later, you will be able to react 🛡️ to join with a different YAML.",
+                      footer: {
+                        text: `Game code: ${gameCode}`,
+                      },
+                    }),
+                  ],
+                })) as DiscordMessage;
+                msg.react("⚔️");
+
                 const newRecruit: GameRecruitmentProcess = {
-                  msg: (await interaction.followUp({
-                    content: `${userMention(startingUser)} is starting a game!`,
-                    embeds: [
-                      new MessageEmbed({
-                        title: "Multiworld Game Call",
-                        description:
-                          "React ⚔️ to join into this game with your default YAML.",
-                        footer: {
-                          text: `Game code: ${gameCode}`,
-                        },
-                      }),
-                    ],
-                  })) as DiscordMessage,
+                  msg,
                   guildId,
                   channelId,
                   startingUser,
                   reactedUsers: [],
-                };
-                this.recruit[guildId] = newRecruit;
-
-                newRecruit.msg.react("⚔️");
-                newRecruit.reactionCollector =
-                  newRecruit.msg.createReactionCollector({
+                  reactionCollector: msg.createReactionCollector({
                     filter: (reaction, user) =>
                       this.clientId !== user.id && reaction.emoji.name === "⚔️",
                     dispose: true,
-                  });
+                  }),
+                };
+                this.recruit[guildId] = newRecruit;
 
                 const { reactionCollector } = newRecruit;
-                reactionCollector.on("collect", (reaction, user) => {
+                reactionCollector?.on("collect", (reaction, user) => {
                   if (newRecruit && reaction.emoji.name === "⚔️")
                     newRecruit.reactedUsers.push(user.id);
                 });
-                reactionCollector.on("remove", (reaction, user) => {
+                reactionCollector?.on("remove", (reaction, user) => {
                   if (newRecruit && reaction.emoji.name === "⚔️")
                     newRecruit.reactedUsers = newRecruit.reactedUsers.filter(
                       (i) => i != user.id
                     );
                 });
-                reactionCollector.on("dispose", (reaction) => {
+                reactionCollector?.on("dispose", (reaction) => {
                   // TODO: find out when this event fires (if it does)
                   console.debug("Dispose:" /*, reaction*/);
                   if (newRecruit && reaction.emoji.name === "⚔️") {
@@ -833,9 +884,9 @@ export class Archipelabot {
                     newRecruit.reactedUsers = [];
                   }
                 });
-                reactionCollector.on("end", async (_collected, reason) => {
+                reactionCollector?.on("end", async (_collected, reason) => {
                   if (["aplaunch", "apcancel"].includes(reason)) {
-                    console.debug(newRecruit.reactedUsers);
+                    // console.debug(newRecruit.reactedUsers);
                     await newRecruit.msg.delete();
                     delete this.recruit[newRecruit.guildId];
                   }
@@ -861,22 +912,7 @@ export class Archipelabot {
                 content:
                   "Nobody has signed up for this game yet! Either wait for signups or cancel.",
               });
-            else {
-              const { reactedUsers } = this.recruit[guildId];
-              this.recruit[guildId].reactionCollector?.stop("aplaunch");
-
-              interaction.followUp(
-                "TEST: Game has started. Players: " +
-                  reactedUsers.map((i) => userMention(i)).join(", ")
-              );
-
-              reactedUsers.forEach((i) => {
-                const user = this.client.users.cache.get(i);
-                user?.send(
-                  "Here's where you'd be sent your data file, if there is one for your game."
-                );
-              });
-            }
+            else this.CreateGame(interaction, this.recruit[guildId]);
             break;
 
           case "cancel":
@@ -916,6 +952,332 @@ export class Archipelabot {
       }
     }
   };
+
+  async CreateGame(
+    interaction: BaseCommandInteraction,
+    recruitInfo: GameRecruitmentProcess
+  ) {
+    const { PYTHON_PATH, AP_PATH } = process.env;
+    recruitInfo.reactionCollector?.stop("aplaunch");
+
+    if (!PYTHON_PATH) {
+      interaction.reply("Python path has not been defined! Game cannot start.");
+      return;
+    }
+    if (!AP_PATH) {
+      interaction.reply(
+        "Archipelago path has not been defined! Game cannot start."
+      );
+      return;
+    }
+
+    const defaultYamls = await PlayerTable.findAll({
+      attributes: ["userId", "defaultCode"],
+      where: {
+        userId: { [Op.in]: recruitInfo.reactedUsers },
+        defaultCode: { [Op.not]: null },
+      },
+    });
+    const hasDefaults = defaultYamls.map((i) => i.userId);
+    const missingDefaults = recruitInfo.reactedUsers.filter(
+      (i) => !hasDefaults.includes(i)
+    );
+
+    const LaunchGame = async (
+      incomingYamls?: [string, string][],
+      msg?: DiscordMessage
+    ) => {
+      const playerList: [string, string][] = defaultYamls.map((i) => [
+        i.userId,
+        i.defaultCode,
+      ]) as [string, string][];
+      if (incomingYamls) playerList.push(...incomingYamls);
+
+      if (playerList.length === 0) {
+        if (msg) msg.edit("There are no players left to play this game!");
+        else
+          interaction.followUp("There are no players left to play this game!");
+        return;
+      }
+
+      const code = generateLetterCode(
+        (await GameTable.findAll({ attributes: ["code"] })).map((i) => i.code)
+      );
+      const playersDir = pathJoin(AP_PATH, "Players");
+      //const outputDir = path.join(AP_PATH, "output");
+      if (!existsSync("./games")) mkdirSync("./games");
+
+      if (!existsSync(playersDir)) mkdirSync(playersDir);
+      await readdir(playersDir, { withFileTypes: true }).then((files) =>
+        files
+          .filter((i) => !i.isDirectory())
+          .forEach((i) => unlink(pathJoin(playersDir, i.name)))
+      );
+
+      await Promise.all(
+        (
+          await YamlTable.findAll({
+            attributes: ["userId", "filename"],
+            where: { code: { [Op.in]: playerList.map((i) => i[1]) } },
+          })
+        ).map((i) =>
+          copyFile(
+            `./yamls/${i.userId}/${i.filename}.yaml`,
+            pathJoin(playersDir, `${i.filename}.yaml`)
+          )
+        )
+      );
+
+      const outputPath = pathJoin("./games", code);
+      const outputFile = await new Promise<string>((f, r) => {
+        const pyApProcess = spawn(
+          PYTHON_PATH,
+          ["Generate.py", "--outputpath", outputPath],
+          { cwd: AP_PATH, windowsHide: true }
+        );
+        let outData = "";
+        let errData = "";
+
+        pyApProcess.stdout.on("data", (data) => (outData += data));
+        pyApProcess.stderr.on("data", (data) => (errData += data));
+        pyApProcess.on("close", (code) => {
+          if (code === 0) {
+            const outputFile = /(AP_\d+\.zip)/.exec(outData);
+            if (!outputFile || !outputFile[1])
+              r(new Error("Unable to identify output file"));
+            else f(outputFile[1]);
+          } else r(new Error(errData));
+        });
+      }).catch((e) => {
+        if (msg)
+          msg.edit({
+            content: "An error occurred during game generation.",
+            embeds: [
+              new MessageEmbed({
+                title: "Generation error",
+                description: (e as Error).message,
+              }),
+            ],
+          });
+        else
+          interaction.followUp({
+            content: "An error occurred during game generation.",
+            embeds: [
+              new MessageEmbed({
+                title: "Generation error",
+                description: (e as Error).message,
+              }),
+            ],
+          });
+        return undefined;
+      });
+      if (outputFile === undefined) return;
+
+      if (msg)
+        msg.edit(
+          `Game ${code} has been generated. Players: ` +
+            playerList.map((i) => userMention(i[0])).join(", ")
+        );
+      else
+        interaction.followUp(
+          `Game ${code} has been generated. Players: ` +
+            playerList.map((i) => userMention(i[0])).join(", ")
+        );
+
+      playerList.forEach((i) => {
+        const user = this.client.users.cache.get(i[0]);
+        user?.send(
+          "Here's where you'd be sent your data file, if there is one for your game."
+        );
+      });
+    };
+
+    if (missingDefaults.length === 0) LaunchGame();
+    else {
+      const incomingYamls: Record<string, string | null> = {};
+
+      const msg = (await interaction.followUp(
+        "The following player(s) need to provide a YAML before the game can begin. " +
+          `The game will start <t:${
+            Date.now() + 30 * 60
+          }:R> if not everyone has responded.\n` +
+          missingDefaults.map((i) => userMention(i)).join(", ")
+      )) as DiscordMessage;
+
+      const CheckPlayerResponses = () => {
+        if (Object.keys(incomingYamls).length === missingDefaults.length) {
+          LaunchGame(
+            Object.entries(incomingYamls).filter((i) => i[1] !== null) as [
+              string,
+              string
+            ][],
+            msg
+          );
+        }
+      };
+
+      for (const userId of missingDefaults) {
+        const user = this.client.users.cache.get(userId);
+        if (!user) {
+          incomingYamls[userId] = null;
+          break;
+        }
+
+        const yamls = await YamlTable.findAll({ where: { userId } });
+
+        const msg = (await user.send({
+          content:
+            `Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ` +
+            `If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
+              Date.now() + 30 * 60
+            }.`,
+          components: [
+            new MessageActionRow({
+              components: [
+                new MessageSelectMenu({
+                  customId: "selectYaml",
+                  placeholder: "Select a YAML",
+                  options:
+                    yamls.length > 0
+                      ? yamls.map((i) => {
+                          return {
+                            label: i.description,
+                            description: (JSON.parse(i.games) as string[]).join(
+                              ", "
+                            ),
+                            value: i.code,
+                          } as MessageSelectOptionData;
+                        })
+                      : [{ label: "No YAMLs", value: "noyaml" }],
+                }),
+              ],
+            }),
+            new MessageActionRow({
+              components: [
+                new MessageButton({
+                  customId: "withdraw",
+                  label: "Withdraw",
+                  style: "DANGER",
+                }),
+              ],
+            }),
+          ],
+        })) as DiscordMessage;
+
+        const subInteractionHandler = async (subInt: DiscordInteraction) => {
+          if (!subInt.isButton() && !subInt.isSelectMenu()) return;
+          if (subInt.user.id !== userId) return;
+          if (subInt.message.id !== msg.id) return;
+
+          if (subInt.isButton()) {
+            switch (subInt.customId) {
+              case "withdraw":
+                subInt.update(
+                  "Sorry to hear that. Your request has been withdrawn."
+                );
+                msgCollector.stop("withdrawn");
+                break;
+            }
+          } else if (subInt.isSelectMenu()) {
+            const code = subInt.values[0];
+            if (code === "noyaml")
+              subInt.update({
+                content:
+                  "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
+              });
+            else {
+              incomingYamls[userId] = code;
+              subInt.update(
+                "Thanks! Your YAML has been received and will be used in your upcoming game."
+              );
+              msgCollector.stop("selectedyaml");
+            }
+          }
+        };
+        this.client.on("interactionCreate", subInteractionHandler);
+
+        const msgCollector = msg.channel.createMessageCollector({
+          filter: (msgIn) =>
+            msgIn.type === "REPLY" &&
+            msgIn.reference?.messageId === msg.id &&
+            msgIn.attachments.size > 0,
+          time: 30 * 60 * 1000,
+        });
+        msgCollector?.on("collect", (msgIn) => {
+          const yamls = msgIn.attachments.filter(
+            (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
+          );
+          if (yamls.size === 0)
+            msg.edit("That wasn't a YAML! Please try again.");
+          else {
+            Promise.all(yamls.map((i) => getFile(i.url)))
+              .then(async (i) => {
+                const validate = quickValidateYaml(i[0]);
+                if (!validate.error) {
+                  const filename = `./yamls/${userId}/${msg.id}.yaml`;
+                  const code = generateLetterCode(
+                    (await YamlTable.findAll({ attributes: ["code"] })).map(
+                      (i) => i.code
+                    )
+                  );
+                  await Promise.all([
+                    YamlTable.create({
+                      code,
+                      userId,
+                      playerName: JSON.stringify(validate.name ?? ["Who?"]),
+                      description: validate.desc ?? "No description given",
+                      games: JSON.stringify(
+                        validate.games ?? ["A Link to the Past"]
+                      ),
+                      filename,
+                    }),
+                    writeFile(filename, validate.data),
+                  ]);
+
+                  msgCollector.stop("newyaml");
+                } else {
+                  msg.edit({
+                    content: `The supplied YAML was invalid: ${validate.error}. Please try again.`,
+                  });
+                }
+
+                if (msgIn.deletable) msgIn.delete();
+              })
+              .catch((e) => {
+                msg.edit("An error occurred. Check debug log.");
+                console.error(e);
+              });
+          }
+        });
+        msgCollector.on("end", (_collected, reason) => {
+          const finallyMsg = (() => {
+            switch (reason) {
+              case "time":
+                return "Sorry, this YAML request has timed out.";
+              case "newyaml":
+                return "Thanks! Your new YAML has been added to your library and will be used in your upcoming game.";
+              case "selectedyaml":
+                return "Thanks! That YAML will be used in your upcoming game.";
+              case "withdrawn":
+                return "Sorry to hear that. Your request has been withdrawn.";
+              default:
+                return `Unrecognized reason code: ${reason}`;
+            }
+          })();
+          msg.edit({
+            content: finallyMsg,
+            components: [],
+          });
+          CheckPlayerResponses();
+          this.client.off("interactionCreate", subInteractionHandler);
+        });
+      }
+    }
+  }
+
+  async RunGame() {
+    return 0;
+  }
 
   /*
   async generateGame(channel: string, users: string[]) {
