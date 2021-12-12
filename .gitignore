@@ -10,6 +10,8 @@ lib
 .pnp.*
 
 yamls/
+games/
+test/
 
 **/*.code-workspace
 **/botconf.json

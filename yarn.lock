@@ -205,6 +205,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/adm-zip@npm:^0":
+  version: 0.4.34
+  resolution: "@types/adm-zip@npm:0.4.34"
+  dependencies:
+    "@types/node": "*"
+  checksum: dc9dfda261c7fa898185c6d73e89c4a2f6db1faa0d47cd14ce8fadf882078a7b8de8d953dac2bba321bcdde2059da67daacfdfb878ca459d317f32de36b0be6d
+  languageName: node
+  linkType: hard
+
 "@types/cacheable-request@npm:^6.0.1":
   version: 6.0.2
   resolution: "@types/cacheable-request@npm:6.0.2"
@@ -643,6 +652,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"adm-zip@npm:^0.5.9":
+  version: 0.5.9
+  resolution: "adm-zip@npm:0.5.9"
+  checksum: 4909bc04119fdd5e8f8ba43826e50623e5c427cf0a939c809d4f9456a6a03c6aa0544e82088739de9ba16b7649f71b99ccbbddc7b2c38bd6143f9c4726cc7ed9
+  languageName: node
+  linkType: hard
+
 "agent-base@npm:6, agent-base@npm:^6.0.2":
   version: 6.0.2
   resolution: "agent-base@npm:6.0.2"
@@ -750,6 +766,7 @@ __metadata:
   resolution: "archipelabot@workspace:."
   dependencies:
     "@discordjs/builders": ^0.8.2
+    "@types/adm-zip": ^0
     "@types/eslint": ^8
     "@types/node": ^16.11.10
     "@types/prettier": ^2
@@ -759,6 +776,7 @@ __metadata:
     "@typescript-eslint/eslint-plugin": ^5.4.0
     "@typescript-eslint/parser": ^5.4.0
     "@yarnpkg/sdks": ^2.5.1-rc.4
+    adm-zip: ^0.5.9
     discord.js: ^13.3.1
     dotenv: ^10.0.0
     eslint: ^8.3.0
