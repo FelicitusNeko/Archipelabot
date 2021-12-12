@@ -18,8 +18,9 @@ import {
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
 //import { Sequelize } from "sequelize";
-import { Op } from "sequelize/dist";
+import { Op as SqlOp } from "sequelize/dist";
 import * as YAML from "yaml";
+import * as AdmZip from "adm-zip";
 
 import { get as httpsGet } from "https";
 import { createReadStream, existsSync, mkdirSync } from "fs";
@@ -31,7 +32,9 @@ import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
 import { join as pathJoin, resolve as pathResolve } from "path";
 import { spawn } from "child_process";
-import AdmZip = require("adm-zip");
+import { basename } from "path/posix";
+
+const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
 interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
@@ -276,8 +279,8 @@ export class Archipelabot {
           },
           {
             type: ApplicationCommandOptionTypes.STRING,
-            name: "gameid",
-            description: "The game ID to act upon.",
+            name: "code",
+            description: "The game code to act upon, if any. Omit if you're launching a game that's currently recruiting via /apgame start",
             required: false,
           },
         ],
@@ -958,23 +961,39 @@ export class Archipelabot {
             break;
 
           case "launch":
-            if (!this.recruit[guildId])
-              interaction.followUp({
-                ephemeral: true,
-                content: "No game is currently being organized!",
-              });
-            else if (this.recruit[guildId].startingUser !== startingUser)
-              interaction.followUp({
-                ephemeral: true,
-                content: "You're not the person who launched this event!",
-              });
-            else if (this.recruit[guildId].reactedUsers.length === 0)
-              interaction.followUp({
-                ephemeral: true,
-                content:
-                  "Nobody has signed up for this game yet! Either wait for signups or cancel.",
-              });
-            else this.CreateGame(interaction, this.recruit[guildId]);
+            {
+              const code = interaction.options.get("code", false);
+              if (code && typeof code.value === 'string') {
+                const gameData = await GameTable.findOne({where: {code: code.value}});
+                if (gameData) {
+                  if (interaction.user.id === gameData.userId) {
+                    interaction.followUp(`Attempting to launch game ${code.value}.`);
+                    this.RunGame(code.value, interaction.channelId);
+                  } else {
+                    interaction.followUp(`This is not your game! Game ${code.value} was created by ${userMention(gameData.userId)}.`);
+                  }
+                } else {
+                  interaction.followUp(`Game code ${code.value} not found.`)
+                }
+              }
+              else if (!this.recruit[guildId])
+                interaction.followUp({
+                  ephemeral: true,
+                  content: "No game is currently being organized!",
+                });
+              else if (this.recruit[guildId].startingUser !== startingUser)
+                interaction.followUp({
+                  ephemeral: true,
+                  content: "You're not the person who launched this event!",
+                });
+              else if (this.recruit[guildId].reactedUsers.length === 0)
+                interaction.followUp({
+                  ephemeral: true,
+                  content:
+                    "Nobody has signed up for this game yet! Either wait for signups or cancel.",
+                });
+              else this.CreateGame(interaction, this.recruit[guildId]);
+            }
             break;
 
           case "cancel":
@@ -1019,7 +1038,6 @@ export class Archipelabot {
     interaction: BaseCommandInteraction,
     recruitInfo: GameRecruitmentProcess
   ) {
-    const { PYTHON_PATH, AP_PATH } = process.env;
     recruitInfo.reactionCollector?.stop("aplaunch");
 
     if (!PYTHON_PATH) {
@@ -1039,8 +1057,8 @@ export class Archipelabot {
     const defaultYamls = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
-        userId: { [Op.in]: recruitInfo.reactedUsers },
-        defaultCode: { [Op.not]: null },
+        userId: { [SqlOp.in]: recruitInfo.reactedUsers },
+        defaultCode: { [SqlOp.not]: null },
       },
     });
     const hasDefaults = defaultYamls.map((i) => i.userId);
@@ -1084,7 +1102,7 @@ export class Archipelabot {
 
       const playerYamlList = await YamlTable.findAll({
         attributes: ["userId", "filename", "playerName"],
-        where: { code: { [Op.in]: playerList.map((i) => i[1]) } },
+        where: { code: { [SqlOp.in]: playerList.map((i) => i[1]) } },
       });
 
       await Promise.all(
@@ -1193,7 +1211,7 @@ export class Archipelabot {
 
       GameTable.create({
         code,
-        filename: outputFile,
+        filename: basename(outputFile, ".zip"),
         guildId: recruitInfo.guildId,
         userId: recruitInfo.startingUser,
         active: false,
@@ -1412,6 +1430,25 @@ export class Archipelabot {
   }
 
   async RunGame(code: string, channelId: string) {
+    const channel = this.client.channels.cache.get(channelId);
+    if (!channel) throw new Error("Cannot find channel");
+    if (!channel.isText()) throw new Error("Channel is not text channel");
+
+    if (!PYTHON_PATH) {
+      channel.send("Python path has not been defined! Game cannot start.");
+      return;
+    }
+    if (!AP_PATH) {
+      channel.send("Archipelago path has not been defined! Game cannot start.");
+      return;
+    }
+
+    const gameData = await GameTable.findOne({ where: { code } });
+    if (!gameData) {
+      channel.send(`Game ${code} not found.`);
+      return;
+    }
+
     if (this.running[code]) {
       this.running[code] = Object.assign<RunningGame, Partial<RunningGame>>(
         this.running[code],
@@ -1420,18 +1457,106 @@ export class Archipelabot {
         }
       );
     } else {
-      const gameData = await GameTable.findOne({ where: { code } });
-      if (!gameData) {
-        const channel = this.client.channels.cache.get(channelId);
-        if (channel?.isText()) channel.send(`Game ${code} not found.`);
-      } else
-        this.running[code] = {
-          state: GameState.Running,
-          guildId: gameData.guildId,
-          startingUser: gameData.userId,
-          channelId,
-        };
+      this.running[code] = {
+        state: GameState.Running,
+        guildId: gameData.guildId,
+        startingUser: gameData.userId,
+        channelId,
+      };
     }
+
+    const port = (() => {
+      let port;
+      do {
+        port = 38281 + Math.floor(Math.random() * 1000);
+      } while (!isPortAvailable(port));
+      return port;
+    })();
+
+    const liveEmbed = new MessageEmbed({
+      title: "Archipelago Server",
+      fields: [
+        {
+          name: "Server output",
+          value: "Wait...",
+        },
+        {
+          name: "Server",
+          value: `${HOST_DOMAIN}:${port}`,
+          inline: true,
+        },
+        {
+          name: "Host",
+          value: userMention(gameData.userId),
+        },
+      ],
+      footer: {
+        text: `Game code: ${code}`,
+      },
+    });
+    const msg = await channel.send({
+      content:
+        `Game ${code} is live! The game host can reply to this message to send commands to the server. ` +
+        "To send a slash command, precede it with a period instead of a slash so that it doesn't get intercepted by Discord. " +
+        "For instance: `.forfeit player`",
+      embeds: [liveEmbed],
+    });
+
+    const lastFiveLines: string[] = [];
+    const apServer = spawn(
+      PYTHON_PATH,
+      [
+        "MultiServer.py",
+        "--port",
+        port.toString(),
+        "--use_embedded_options",
+        pathResolve(
+          pathJoin("./games", code, gameData.filename + ".archipelago")
+        ),
+      ],
+      { cwd: AP_PATH }
+    );
+
+    let lastUpdate = Date.now();
+    let timeout: NodeJS.Timeout | undefined;
+
+    const UpdateOutput = () => {
+      lastUpdate = Date.now();
+      liveEmbed.fields[0].value = lastFiveLines.join("\n");
+      msg.edit({
+        embeds: [liveEmbed],
+      });
+      timeout = undefined;
+    };
+
+    apServer.stdout.on("data", (data: string) => {
+      lastFiveLines.push(...data.trim().split("\n"));
+      while (lastFiveLines.length > 5) lastFiveLines.shift();
+      if (!timeout) {
+        const deltaLastUpdate = Date.now() - lastUpdate - 1000;
+        if (deltaLastUpdate < 0)
+          timeout = setTimeout(UpdateOutput, Math.abs(deltaLastUpdate));
+      }
+    });
+    apServer.on("close", (pcode) => {
+      msg.edit({
+        content: `Server for game ${code} closed with code ${pcode}.`,
+        embeds: [],
+      });
+      GameTable.update({ active: false }, { where: { code } });
+      msgCollector.stop("serverclose");
+      delete this.running[code];
+    });
+
+    const msgCollector = channel.createMessageCollector({
+      filter: (msgIn) =>
+        msgIn.type === "REPLY" &&
+        msgIn.reference?.messageId === msg.id &&
+        msgIn.author.id === gameData.userId,
+    });
+    msgCollector.on("collect", (msg) => {
+      apServer.stdin.write(msg.content.replace(/^\./, "/") + "\n");
+    });
   }
 
   cmdTest = async (interaction: BaseCommandInteraction) => {
