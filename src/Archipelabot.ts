@@ -29,7 +29,7 @@ import { /*sequelize,*/ GameTable, PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
-import { join as pathJoin } from "path";
+import { join as pathJoin, resolve as pathResolve } from "path";
 import { spawn } from "child_process";
 import AdmZip = require("adm-zip");
 
@@ -37,11 +37,11 @@ interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
 }
 
-// enum GameState {
-//   Assembling,
-//   Running,
-//   Stopped,
-// }
+enum GameState {
+  Assembling,
+  Running,
+  Stopped,
+}
 
 interface GameRecruitmentProcess {
   msg: DiscordMessage;
@@ -52,14 +52,14 @@ interface GameRecruitmentProcess {
   reactedUsers: string[];
 }
 
-// interface RunningGame {
-//   msg: DiscordMessage;
-//   guildId: string;
-//   channelId: string;
-//   startingUser: string;
-//   playingUsers: string[];
-//   state: GameState;
-// }
+interface RunningGame {
+  msg?: DiscordMessage;
+  guildId: string;
+  channelId: string;
+  startingUser: string;
+  //playingUsers: string[];
+  state: GameState;
+}
 
 interface YamlData {
   error?: string;
@@ -173,10 +173,9 @@ const generateLetterCode = (
 export class Archipelabot {
   private client: DiscordClient;
   private cmds: Command[];
-  //private db: Sequelize;
 
   private recruit: Record<string, GameRecruitmentProcess> = {};
-  //private running: Record<string, RunningGame> = {};
+  private running: Record<string, RunningGame> = {};
 
   public get clientId(): string {
     return this.client && this.client.user ? this.client.user.id : "";
@@ -990,6 +989,9 @@ export class Archipelabot {
       return;
     }
 
+    const code = generateLetterCode(
+      (await GameTable.findAll({ attributes: ["code"] })).map((i) => i.code)
+    );
     const defaultYamls = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
@@ -1013,15 +1015,13 @@ export class Archipelabot {
       if (incomingYamls) playerList.push(...incomingYamls);
 
       if (playerList.length === 0) {
-        if (msg) msg.edit("There are no players left to play this game!");
+        if (msg) msg.edit("There are no players left to play this game! It has been cancelled.");
         else
-          interaction.followUp("There are no players left to play this game!");
+          interaction.followUp("There are no players left to play this game! It has been cancelled.");
+        delete this.running[code];
         return;
       }
 
-      const code = generateLetterCode(
-        (await GameTable.findAll({ attributes: ["code"] })).map((i) => i.code)
-      );
       const playersDir = pathJoin(AP_PATH, "Players");
       //const outputDir = path.join(AP_PATH, "output");
       if (!existsSync("./games")) mkdirSync("./games");
@@ -1034,7 +1034,7 @@ export class Archipelabot {
       );
 
       const playerYamlList = await YamlTable.findAll({
-        attributes: ["userId", "filename", "names"],
+        attributes: ["userId", "filename", "playerName"],
         where: { code: { [Op.in]: playerList.map((i) => i[1]) } },
       });
 
@@ -1048,10 +1048,11 @@ export class Archipelabot {
       );
 
       const outputPath = pathJoin("./games", code);
+      console.debug(outputPath);
       const outputFile = await new Promise<string>((f, r) => {
         const pyApProcess = spawn(
           PYTHON_PATH,
-          ["Generate.py", "--outputpath", outputPath],
+          ["Generate.py", "--outputpath", pathResolve(outputPath)],
           { cwd: AP_PATH, windowsHide: true }
         );
         let outData = "";
@@ -1092,25 +1093,73 @@ export class Archipelabot {
       });
       if (outputFile === undefined) return;
 
-      if (msg)
-        msg.edit(
-          `Game ${code} has been generated. Players: ` +
-            playerList.map((i) => userMention(i[0])).join(", ")
-        );
-      else
-        interaction.followUp(
-          `Game ${code} has been generated. Players: ` +
-            playerList.map((i) => userMention(i[0])).join(", ")
-        );
-
-      playerList.forEach((i) => {
-        const user = this.client.users.cache.get(i[0]);
-        user?.send({
-          content:
-            "Here's where you'd be sent your data file, if there is one for your game.",
+      const gameZip = new AdmZip(pathJoin(outputPath, outputFile));
+      const gameZipEntries = gameZip.getEntries();
+      gameZipEntries
+        .filter((i) => i.name.endsWith(".archipelago"))
+        .forEach((i) => writeFile(pathJoin(outputPath, i.name), i.getData()));
+      const spoiler = gameZipEntries
+        .filter((i) => i.name.endsWith(".txt"))
+        .map((i) => {
+          return { attachment: i.getData(), name: i.name };
         });
+
+      if (msg)
+        msg.edit({
+          content:
+            `Game ${code} has been generated. Players: ` +
+            playerList.map((i) => userMention(i[0])).join(", "),
+          files: spoiler,
+        });
+      else
+        interaction.followUp({
+          content:
+            `Game ${code} has been generated. Players: ` +
+            playerList.map((i) => userMention(i[0])).join(", "),
+          files: spoiler,
+        });
+
+      for (const {userId, playerName} of playerYamlList) {
+        const user = this.client.users.cache.get(userId);
+        if (!user) continue;
+
+        const playerNames: string[] = JSON.parse(playerName);
+        const playerFile = gameZipEntries
+          .filter((i) => {
+            for (const name of playerNames)
+              if (i.name.indexOf(name) > 0) return true;
+            return false;
+          })
+          .map((i) => {
+            return { attachment: i.getData(), name: i.name };
+          });
+
+        if (playerFile.length > 0)
+          user.send({
+            content:
+              `Here is your data file for game ${code}. If you're not sure how to use this, ` +
+              `please refer to the Archipelago setup guide for your game, or ask someone for help.`,
+            files: playerFile,
+          });
+      }
+
+      GameTable.create({
+        code,
+        filename: outputFile,
+        guildId: recruitInfo.guildId,
+        userId: recruitInfo.startingUser,
+        active: false
       });
+
+      this.RunGame(code, recruitInfo.channelId);
     };
+
+    this.running[code] = {
+      state: GameState.Assembling,
+      guildId: recruitInfo.guildId,
+      channelId: recruitInfo.channelId,
+      startingUser: recruitInfo.startingUser,
+    }
 
     if (missingDefaults.length === 0) LaunchGame();
     else {
@@ -1119,13 +1168,15 @@ export class Archipelabot {
       const msg = (await interaction.followUp(
         "The following player(s) need to provide a YAML before the game can begin. " +
           `The game will start <t:${
-            Date.now() + 30 * 60
+            Math.floor(Date.now()/1000) + 30 * 60
           }:R> if not everyone has responded.\n` +
           missingDefaults.map((i) => userMention(i)).join(", ")
       )) as DiscordMessage;
 
       const CheckPlayerResponses = () => {
+        console.debug(Object.keys(incomingYamls).length, missingDefaults.length, Object.keys(incomingYamls).length === missingDefaults.length)
         if (Object.keys(incomingYamls).length === missingDefaults.length) {
+          msg.edit("Everyone's responses have been received. Now generating the game...");
           LaunchGame(
             Object.entries(incomingYamls).filter((i) => i[1] !== null) as [
               string,
@@ -1149,8 +1200,8 @@ export class Archipelabot {
           content:
             `Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ` +
             `If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
-              Date.now() + 30 * 60
-            }.`,
+              Math.floor(Date.now()/1000) + 30 * 60
+            }:R>.`,
           components: [
             new MessageActionRow({
               components: [
@@ -1192,6 +1243,7 @@ export class Archipelabot {
           if (subInt.isButton()) {
             switch (subInt.customId) {
               case "withdraw":
+                incomingYamls[userId] = null;
                 subInt.update(
                   "Sorry to hear that. Your request has been withdrawn."
                 );
@@ -1249,11 +1301,12 @@ export class Archipelabot {
                       games: JSON.stringify(
                         validate.games ?? ["A Link to the Past"]
                       ),
-                      filename,
+                      filename: msg.id,
                     }),
                     writeFile(filename, validate.data),
                   ]);
 
+                  incomingYamls[userId] = code;
                   msgCollector.stop("newyaml");
                 } else {
                   msg.edit({
@@ -1295,8 +1348,23 @@ export class Archipelabot {
     }
   }
 
-  async RunGame() {
-    return 0;
+  async RunGame(code: string, channelId: string) {
+    if (this.running[code]) {
+      this.running[code] = Object.assign<RunningGame, Partial<RunningGame>>(this.running[code], {
+        state: GameState.Running
+      })
+    } else {
+      const gameData = await GameTable.findOne({where: {code}});
+      if (!gameData) {
+        const channel = this.client.channels.cache.get(channelId);
+        if (channel?.isText()) channel.send(`Game ${code} not found.`);
+      } else this.running[code] = {
+        state: GameState.Running,
+        guildId: gameData.guildId,
+        startingUser: gameData.userId,
+        channelId
+      }
+    }
   }
 
   cmdTest = async (interaction: BaseCommandInteraction) => {
@@ -1312,20 +1380,12 @@ export class Archipelabot {
       case "zip":
         {
           const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
-          /*console.debug(
-            testZip
-              .getEntries()
-              .filter((i) => i.name.endsWith(".txt"))
-              .map((i) => /*JSON.parse(i.toString())/ {
-                return { attachment: i.getData(), name: i.name };
-              })
-          );*/
           interaction.followUp({
             content: "Here you go.",
             files: testZip
               .getEntries()
               .filter((i) => i.name.endsWith(".txt"))
-              .map((i) => /*JSON.parse(i.toString())*/ {
+              .map((i) => {
                 return { attachment: i.getData(), name: i.name };
               }),
           });
