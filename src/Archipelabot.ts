@@ -22,7 +22,7 @@ import { Op } from "sequelize/dist";
 import * as YAML from "yaml";
 
 import { get as httpsGet } from "https";
-import { existsSync, mkdirSync } from "fs";
+import { createReadStream, existsSync, mkdirSync } from "fs";
 import { copyFile, readdir, unlink, writeFile } from "fs/promises";
 
 import { /*sequelize,*/ GameTable, PlayerTable, YamlTable } from "./Sequelize";
@@ -31,6 +31,7 @@ import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
 import { join as pathJoin } from "path";
 import { spawn } from "child_process";
+import AdmZip = require("adm-zip");
 
 interface Command extends ChatInputApplicationCommandData {
   run: (interaction: BaseCommandInteraction) => void;
@@ -239,6 +240,24 @@ export class Archipelabot {
           },
         ],
         run: this.cmdAPGame,
+      },
+      {
+        name: "test",
+        description: "Testing commands",
+        type: "CHAT_INPUT",
+        options: [
+          {
+            type: ApplicationCommandOptionTypes.STRING,
+            name: "run",
+            description: "What test to run.",
+            choices: [
+              { name: "Send file", value: "sendfile" },
+              { name: "ZIP", value: "zip" },
+            ],
+            required: true,
+          },
+        ],
+        run: this.cmdTest,
       },
     ];
 
@@ -1014,13 +1033,13 @@ export class Archipelabot {
           .forEach((i) => unlink(pathJoin(playersDir, i.name)))
       );
 
+      const playerYamlList = await YamlTable.findAll({
+        attributes: ["userId", "filename", "names"],
+        where: { code: { [Op.in]: playerList.map((i) => i[1]) } },
+      });
+
       await Promise.all(
-        (
-          await YamlTable.findAll({
-            attributes: ["userId", "filename"],
-            where: { code: { [Op.in]: playerList.map((i) => i[1]) } },
-          })
-        ).map((i) =>
+        playerYamlList.map((i) =>
           copyFile(
             `./yamls/${i.userId}/${i.filename}.yaml`,
             pathJoin(playersDir, `${i.filename}.yaml`)
@@ -1086,9 +1105,10 @@ export class Archipelabot {
 
       playerList.forEach((i) => {
         const user = this.client.users.cache.get(i[0]);
-        user?.send(
-          "Here's where you'd be sent your data file, if there is one for your game."
-        );
+        user?.send({
+          content:
+            "Here's where you'd be sent your data file, if there is one for your game.",
+        });
       });
     };
 
@@ -1278,6 +1298,41 @@ export class Archipelabot {
   async RunGame() {
     return 0;
   }
+
+  cmdTest = async (interaction: BaseCommandInteraction) => {
+    switch (interaction.options.get("run", true).value as string) {
+      case "sendfile":
+        interaction.followUp({
+          content: "Here you go.",
+          files: [
+            { attachment: createReadStream(".yarnrc.yml"), name: "test.yaml" },
+          ],
+        });
+        break;
+      case "zip":
+        {
+          const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
+          /*console.debug(
+            testZip
+              .getEntries()
+              .filter((i) => i.name.endsWith(".txt"))
+              .map((i) => /*JSON.parse(i.toString())/ {
+                return { attachment: i.getData(), name: i.name };
+              })
+          );*/
+          interaction.followUp({
+            content: "Here you go.",
+            files: testZip
+              .getEntries()
+              .filter((i) => i.name.endsWith(".txt"))
+              .map((i) => /*JSON.parse(i.toString())*/ {
+                return { attachment: i.getData(), name: i.name };
+              }),
+          });
+        }
+        break;
+    }
+  };
 
   /*
   async generateGame(channel: string, users: string[]) {
