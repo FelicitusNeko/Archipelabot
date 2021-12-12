@@ -147,6 +147,49 @@ const quickValidateYaml = (data: string) => {
   }
 };
 
+const isPortAvailable = (port: number) => {
+  const { platform } = process;
+  return new Promise((f, r) => {
+    if (port < 1024 || port > 65535) r(new Error(`Invalid port: ${port}`));
+    switch (platform) {
+      case "win32":
+        {
+          const netstat = spawn("netstat", ["-ano"]);
+          let output = "";
+          netstat.stdout.on("data", (data) => (output += data));
+          netstat.on("close", (code) => {
+            if (code === 0) {
+              f(
+                !output
+                  .trim()
+                  .split("\n")
+                  .slice(4)
+                  .map((i) =>
+                    Number.parseInt(i.trim().split(/\s+/)[1].split(":")[1])
+                  )
+                  .includes(port)
+              );
+            } else r(new Error(`netstat returned with code: ${code}`));
+          });
+        }
+        break;
+      case "linux":
+        {
+          const lsof = spawn("lsof", [`-i:${port}`]);
+          let output = "";
+          lsof.stdout.on("data", (data) => (output += data));
+          lsof.on("close", () => {
+            f(output.length === 0);
+          });
+        }
+        break;
+      default:
+        r(new Error(`Platform unrecognized: ${platform}`));
+        break;
+    }
+  });
+};
+
 /**
  * Generates a letter code.
  * @param {string[]} checkAgainst A list of already used codes. The function will generate a code that is not on this list.
@@ -252,6 +295,7 @@ export class Archipelabot {
             choices: [
               { name: "Send file", value: "sendfile" },
               { name: "ZIP", value: "zip" },
+              { name: "Port detection", value: "port" },
             ],
             required: true,
           },
@@ -1015,9 +1059,14 @@ export class Archipelabot {
       if (incomingYamls) playerList.push(...incomingYamls);
 
       if (playerList.length === 0) {
-        if (msg) msg.edit("There are no players left to play this game! It has been cancelled.");
+        if (msg)
+          msg.edit(
+            "There are no players left to play this game! It has been cancelled."
+          );
         else
-          interaction.followUp("There are no players left to play this game! It has been cancelled.");
+          interaction.followUp(
+            "There are no players left to play this game! It has been cancelled."
+          );
         delete this.running[code];
         return;
       }
@@ -1048,7 +1097,6 @@ export class Archipelabot {
       );
 
       const outputPath = pathJoin("./games", code);
-      console.debug(outputPath);
       const outputFile = await new Promise<string>((f, r) => {
         const pyApProcess = spawn(
           PYTHON_PATH,
@@ -1119,7 +1167,7 @@ export class Archipelabot {
           files: spoiler,
         });
 
-      for (const {userId, playerName} of playerYamlList) {
+      for (const { userId, playerName } of playerYamlList) {
         const user = this.client.users.cache.get(userId);
         if (!user) continue;
 
@@ -1148,7 +1196,7 @@ export class Archipelabot {
         filename: outputFile,
         guildId: recruitInfo.guildId,
         userId: recruitInfo.startingUser,
-        active: false
+        active: false,
       });
 
       this.RunGame(code, recruitInfo.channelId);
@@ -1159,7 +1207,7 @@ export class Archipelabot {
       guildId: recruitInfo.guildId,
       channelId: recruitInfo.channelId,
       startingUser: recruitInfo.startingUser,
-    }
+    };
 
     if (missingDefaults.length === 0) LaunchGame();
     else {
@@ -1168,15 +1216,21 @@ export class Archipelabot {
       const msg = (await interaction.followUp(
         "The following player(s) need to provide a YAML before the game can begin. " +
           `The game will start <t:${
-            Math.floor(Date.now()/1000) + 30 * 60
+            Math.floor(Date.now() / 1000) + 30 * 60
           }:R> if not everyone has responded.\n` +
           missingDefaults.map((i) => userMention(i)).join(", ")
       )) as DiscordMessage;
 
       const CheckPlayerResponses = () => {
-        console.debug(Object.keys(incomingYamls).length, missingDefaults.length, Object.keys(incomingYamls).length === missingDefaults.length)
+        console.debug(
+          Object.keys(incomingYamls).length,
+          missingDefaults.length,
+          Object.keys(incomingYamls).length === missingDefaults.length
+        );
         if (Object.keys(incomingYamls).length === missingDefaults.length) {
-          msg.edit("Everyone's responses have been received. Now generating the game...");
+          msg.edit(
+            "Everyone's responses have been received. Now generating the game..."
+          );
           LaunchGame(
             Object.entries(incomingYamls).filter((i) => i[1] !== null) as [
               string,
@@ -1200,7 +1254,7 @@ export class Archipelabot {
           content:
             `Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ` +
             `If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
-              Math.floor(Date.now()/1000) + 30 * 60
+              Math.floor(Date.now() / 1000) + 30 * 60
             }:R>.`,
           components: [
             new MessageActionRow({
@@ -1286,13 +1340,22 @@ export class Archipelabot {
               .then(async (i) => {
                 const validate = quickValidateYaml(i[0]);
                 if (!validate.error) {
-                  const filename = `./yamls/${userId}/${msg.id}.yaml`;
+                  //const filename = `./yamls/${userId}/${msg.id}.yaml`;
+                  const filepath = pathJoin("./yamls", userId);
+                  const filename = pathJoin(filepath, msg.id + ".yaml");
+                  if (!existsSync("./yamls")) mkdirSync("./yamls");
+                  if (!existsSync(filepath)) mkdirSync(filepath);
+
                   const code = generateLetterCode(
                     (await YamlTable.findAll({ attributes: ["code"] })).map(
                       (i) => i.code
                     )
                   );
                   await Promise.all([
+                    PlayerTable.findOne({ where: { userId } }).then(
+                      (i) =>
+                        i ?? PlayerTable.create({ userId, defaultCode: null })
+                    ),
                     YamlTable.create({
                       code,
                       userId,
@@ -1350,20 +1413,24 @@ export class Archipelabot {
 
   async RunGame(code: string, channelId: string) {
     if (this.running[code]) {
-      this.running[code] = Object.assign<RunningGame, Partial<RunningGame>>(this.running[code], {
-        state: GameState.Running
-      })
+      this.running[code] = Object.assign<RunningGame, Partial<RunningGame>>(
+        this.running[code],
+        {
+          state: GameState.Running,
+        }
+      );
     } else {
-      const gameData = await GameTable.findOne({where: {code}});
+      const gameData = await GameTable.findOne({ where: { code } });
       if (!gameData) {
         const channel = this.client.channels.cache.get(channelId);
         if (channel?.isText()) channel.send(`Game ${code} not found.`);
-      } else this.running[code] = {
-        state: GameState.Running,
-        guildId: gameData.guildId,
-        startingUser: gameData.userId,
-        channelId
-      }
+      } else
+        this.running[code] = {
+          state: GameState.Running,
+          guildId: gameData.guildId,
+          startingUser: gameData.userId,
+          channelId,
+        };
     }
   }
 
@@ -1390,6 +1457,13 @@ export class Archipelabot {
               }),
           });
         }
+        break;
+      case "port":
+        interaction.followUp(
+          `Port 38281 is ${
+            (await isPortAvailable(38281)) ? "" : "not "
+          }available.`
+        );
         break;
     }
   };
