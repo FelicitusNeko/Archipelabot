@@ -280,7 +280,8 @@ export class Archipelabot {
           {
             type: ApplicationCommandOptionTypes.STRING,
             name: "code",
-            description: "The game code to act upon, if any. Omit if you're launching a game that's currently recruiting via /apgame start",
+            description:
+              "The game code to act upon, if any. Omit if launching a game currently being recruited.",
             required: false,
           },
         ],
@@ -765,7 +766,8 @@ export class Archipelabot {
       content: `${userMention(
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
-      attachments: [yamlAttach],
+      //attachments: [yamlAttach],
+      files: [{ attachment: Buffer.from(yamlData.data) }],
       components: [
         new MessageActionRow({
           components: [
@@ -818,6 +820,9 @@ export class Archipelabot {
                 userId: receivingUser.id,
                 defaultCode: null,
               }));
+
+            if (!existsSync('./yamls')) mkdirSync('./yamls');
+            if (!existsSync(pathJoin('./yamls', receivingUser.id))) mkdirSync(pathJoin('./yamls', receivingUser.id));
             await Promise.all([
               writeFile(
                 `./yamls/${receivingUser.id}/${msg.id}.yaml`,
@@ -963,20 +968,27 @@ export class Archipelabot {
           case "launch":
             {
               const code = interaction.options.get("code", false);
-              if (code && typeof code.value === 'string') {
-                const gameData = await GameTable.findOne({where: {code: code.value}});
+              if (code && typeof code.value === "string") {
+                const gameData = await GameTable.findOne({
+                  where: { code: code.value },
+                });
                 if (gameData) {
                   if (interaction.user.id === gameData.userId) {
-                    interaction.followUp(`Attempting to launch game ${code.value}.`);
+                    interaction.followUp(
+                      `Attempting to launch game ${code.value}.`
+                    );
                     this.RunGame(code.value, interaction.channelId);
                   } else {
-                    interaction.followUp(`This is not your game! Game ${code.value} was created by ${userMention(gameData.userId)}.`);
+                    interaction.followUp(
+                      `This is not your game! Game ${
+                        code.value
+                      } was created by ${userMention(gameData.userId)}.`
+                    );
                   }
                 } else {
-                  interaction.followUp(`Game code ${code.value} not found.`)
+                  interaction.followUp(`Game code ${code.value} not found.`);
                 }
-              }
-              else if (!this.recruit[guildId])
+              } else if (!this.recruit[guildId])
                 interaction.followUp({
                   ephemeral: true,
                   content: "No game is currently being organized!",
@@ -1529,13 +1541,14 @@ export class Archipelabot {
       timeout = undefined;
     };
 
-    apServer.stdout.on("data", (data: string) => {
-      lastFiveLines.push(...data.trim().split("\n"));
+    apServer.stdout.on("data", (data: Buffer) => {
+      lastFiveLines.push(...(data.toString().trim().split(/\n/)));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
       if (!timeout) {
         const deltaLastUpdate = Date.now() - lastUpdate - 1000;
-        if (deltaLastUpdate < 0)
+        if (deltaLastUpdate < 0) 
           timeout = setTimeout(UpdateOutput, Math.abs(deltaLastUpdate));
+        else UpdateOutput();
       }
     });
     apServer.on("close", (pcode) => {
