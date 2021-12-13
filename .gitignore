@@ -12,6 +12,7 @@ lib
 yamls/
 games/
 test/
+apbot.sqlite
 
 **/*.code-workspace
 **/botconf.json
