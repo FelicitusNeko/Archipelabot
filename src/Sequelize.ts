@@ -51,7 +51,7 @@ YamlTable.init(
       defaultValue: "No description provided",
     },
     playerName: {
-      type: DataTypes.STRING(16),
+      type: DataTypes.JSON,
       allowNull: false,
     },
     games: {
