@@ -14,19 +14,26 @@ import {
   InteractionUpdateOptions,
   InteractionReplyOptions,
   MessageAttachment,
+  MessageEditOptions,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
-//import { Sequelize } from "sequelize";
 import { Op as SqlOp } from "sequelize/dist";
 import * as YAML from "yaml";
 import * as AdmZip from "adm-zip";
 
 import { get as httpsGet } from "https";
-import { createReadStream, existsSync, mkdirSync } from "fs";
-import { copyFile, readdir, unlink, writeFile } from "fs/promises";
+import { createWriteStream, existsSync } from "fs";
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  unlink,
+  writeFile,
+} from "fs/promises";
 
-import { /*sequelize,*/ GameTable, PlayerTable, YamlTable } from "./Sequelize";
+import { GameTable, PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
@@ -37,7 +44,7 @@ import { basename } from "path/posix";
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
 interface Command extends ChatInputApplicationCommandData {
-  run: (interaction: BaseCommandInteraction) => void;
+  run: (interaction: BaseCommandInteraction) => Promise<void>;
 }
 
 enum GameState {
@@ -72,6 +79,9 @@ interface YamlData {
   data: string;
 }
 
+const mkdirIfNotExist = (path: string): Promise<void> =>
+  !existsSync(path) ? mkdir(path) : Promise.resolve();
+
 const getFile = (url: string) => {
   return new Promise<string>((f, r) => {
     httpsGet(url, (res) => {
@@ -86,7 +96,18 @@ const getFile = (url: string) => {
 const quickValidateYaml = (data: string) => {
   const gameListStr = gameList as string[];
   try {
-    const yamlIn = YAML.parse(data);
+    const yamlIn = (() => {
+      try {
+        return YAML.parse(data);
+      } catch (e) {
+        console.warn(
+          `Parsing as YAML failed: ${
+            (e as Error).message
+          }\nTrying to parse as JSON instead`
+        );
+        return JSON.parse(data);
+      }
+    })();
 
     const ValidateName = (name: string) => {
       const parsedName = name.replace(
@@ -104,12 +125,13 @@ const quickValidateYaml = (data: string) => {
         nameList = Object.keys(yamlIn.name).map(ValidateName);
         break;
       case "string":
-        nameList.push(ValidateName(yamlIn.name));
+        nameList = [ValidateName(yamlIn.name)];
         break;
       case "undefined":
         throw new Error("Name missing");
     }
 
+    if (yamlIn.description === "") delete yamlIn.description;
     const retval: YamlData = {
       desc: yamlIn.description ?? "No description",
       name: nameList,
@@ -300,6 +322,7 @@ export class Archipelabot {
               { name: "Send file", value: "sendfile" },
               { name: "ZIP", value: "zip" },
               { name: "Port detection", value: "port" },
+              { name: "Long embeds/spoiler parsing", value: "spoiler" },
             ],
             required: true,
           },
@@ -328,12 +351,25 @@ export class Archipelabot {
           }
 
           await interaction.deferReply();
-          slashCommand.run(interaction);
+          slashCommand.run(interaction).catch((e) => {
+            console.error(e);
+            interaction.followUp({
+              content: "An error occured.",
+              embeds: [
+                new MessageEmbed({
+                  title: "Error content",
+                  description: (e as Error).message,
+                  timestamp: Date.now() / 1000,
+                }),
+              ],
+            });
+          });
         }
       }
     );
 
-    if (!existsSync("./yamls")) mkdirSync("./yamls");
+    mkdirIfNotExist("./yamls");
+    mkdirIfNotExist("./games");
 
     this.client.login((botConf as BotConf).discord.token);
   }
@@ -500,7 +536,7 @@ export class Archipelabot {
                 ).map((i) => i.code);
                 let addedCount = 0;
 
-                if (!existsSync(userDir)) mkdirSync(userDir);
+                mkdirIfNotExist(userDir);
                 for (const x in i) {
                   const validate = quickValidateYaml(i[x]);
                   if (!validate.error) {
@@ -821,8 +857,7 @@ export class Archipelabot {
                 defaultCode: null,
               }));
 
-            if (!existsSync('./yamls')) mkdirSync('./yamls');
-            if (!existsSync(pathJoin('./yamls', receivingUser.id))) mkdirSync(pathJoin('./yamls', receivingUser.id));
+            await mkdirIfNotExist(pathJoin("./yamls", receivingUser.id));
             await Promise.all([
               writeFile(
                 `./yamls/${receivingUser.id}/${msg.id}.yaml`,
@@ -969,24 +1004,29 @@ export class Archipelabot {
             {
               const code = interaction.options.get("code", false);
               if (code && typeof code.value === "string") {
+                const codeUpper = code.value.toUpperCase();
                 const gameData = await GameTable.findOne({
-                  where: { code: code.value },
+                  where: { code: codeUpper },
                 });
                 if (gameData) {
-                  if (interaction.user.id === gameData.userId) {
+                  if (interaction.guildId !== gameData.guildId) {
                     interaction.followUp(
-                      `Attempting to launch game ${code.value}.`
+                      `Game ${codeUpper} was not created on this server.`
                     );
-                    this.RunGame(code.value, interaction.channelId);
+                  } else if (interaction.user.id !== gameData.userId) {
+                    interaction.followUp(
+                      `This is not your game! Game ${codeUpper} was created by ${userMention(
+                        gameData.userId
+                      )}.`
+                    );
                   } else {
                     interaction.followUp(
-                      `This is not your game! Game ${
-                        code.value
-                      } was created by ${userMention(gameData.userId)}.`
+                      `Attempting to launch game ${codeUpper}.`
                     );
+                    this.RunGame(codeUpper, interaction.channelId);
                   }
                 } else {
-                  interaction.followUp(`Game code ${code.value} not found.`);
+                  interaction.followUp(`Game code ${codeUpper} not found.`);
                 }
               } else if (!this.recruit[guildId])
                 interaction.followUp({
@@ -1088,24 +1128,23 @@ export class Archipelabot {
       ]) as [string, string][];
       if (incomingYamls) playerList.push(...incomingYamls);
 
+      const writeMsg = (
+        msgContent: string | (MessageEditOptions & InteractionReplyOptions)
+      ) => {
+        if (msg) msg.edit(msgContent);
+        else interaction.followUp(msgContent);
+      };
+
       if (playerList.length === 0) {
-        if (msg)
-          msg.edit(
-            "There are no players left to play this game! It has been cancelled."
-          );
-        else
-          interaction.followUp(
-            "There are no players left to play this game! It has been cancelled."
-          );
+        writeMsg(
+          "There are no players left to play this game! It has been cancelled."
+        );
         delete this.running[code];
         return;
       }
 
       const playersDir = pathJoin(AP_PATH, "Players");
-      //const outputDir = path.join(AP_PATH, "output");
-      if (!existsSync("./games")) mkdirSync("./games");
-
-      if (!existsSync(playersDir)) mkdirSync(playersDir);
+      await mkdirIfNotExist(playersDir);
       await readdir(playersDir, { withFileTypes: true }).then((files) =>
         files
           .filter((i) => !i.isDirectory())
@@ -1147,55 +1186,70 @@ export class Archipelabot {
           } else r(new Error(errData));
         });
       }).catch((e) => {
-        if (msg)
-          msg.edit({
-            content: "An error occurred during game generation.",
-            embeds: [
-              new MessageEmbed({
-                title: "Generation error",
-                description: (e as Error).message,
-              }),
-            ],
-          });
-        else
-          interaction.followUp({
-            content: "An error occurred during game generation.",
-            embeds: [
-              new MessageEmbed({
-                title: "Generation error",
-                description: (e as Error).message,
-              }),
-            ],
-          });
+        writeMsg({
+          content: "An error occurred during game generation.",
+          embeds: [
+            new MessageEmbed({
+              title: "Generation error",
+              description: (e as Error).message,
+            }),
+          ],
+        });
         return undefined;
       });
       if (outputFile === undefined) return;
 
       const gameZip = new AdmZip(pathJoin(outputPath, outputFile));
       const gameZipEntries = gameZip.getEntries();
+      const playerListing: RegExpExecArray[] = [];
       gameZipEntries
         .filter((i) => i.name.endsWith(".archipelago"))
         .forEach((i) => writeFile(pathJoin(outputPath, i.name), i.getData()));
       const spoiler = gameZipEntries
-        .filter((i) => i.name.endsWith(".txt"))
+        .filter((i) => i.name.endsWith("_Spoiler.txt"))
         .map((i) => {
-          return { attachment: i.getData(), name: i.name };
+          const spoilerData = i.getData();
+          const spoilerDataString = spoilerData.toString();
+          const playerCountResult = /Players:\s+(\d+)/.exec(spoilerDataString);
+          const playerCount = playerCountResult
+            ? Number.parseInt(playerCountResult[1])
+            : 2;
+          if (playerCount === 1) {
+            const gameMatch = /Game:\s+(.*)/.exec(spoilerDataString);
+            if (gameMatch) playerListing.push(gameMatch);
+          } else {
+            const playerListingRegex =
+              /Player (\d+)+: (.+)[\r\n]Game:\s+(.*)/gm;
+            for (
+              let match = playerListingRegex.exec(spoilerDataString);
+              match !== null;
+              match = playerListingRegex.exec(spoilerDataString)
+            )
+              playerListing.push(match);
+          }
+          return { attachment: spoilerData, name: i.name, spoiler: true };
         });
 
-      if (msg)
-        msg.edit({
-          content:
-            `Game ${code} has been generated. Players: ` +
-            playerList.map((i) => userMention(i[0])).join(", "),
-          files: spoiler,
-        });
-      else
-        interaction.followUp({
-          content:
-            `Game ${code} has been generated. Players: ` +
-            playerList.map((i) => userMention(i[0])).join(", "),
-          files: spoiler,
-        });
+      writeMsg({
+        content:
+          `Game ${code} has been generated. Players: ` +
+          playerList.map((i) => userMention(i[0])).join(", "),
+        files: spoiler,
+        embeds:
+          playerListing.length > 0
+            ? [
+                new MessageEmbed({
+                  title: "Who's Playing What",
+                  description:
+                    playerListing.length === 1
+                      ? `It's only you for this one, and you'll be playing **${playerListing[0][1]}**.`
+                      : playerListing
+                          .map((i) => `${i[2]} → ${i[3]}`)
+                          .join("\n"),
+                }),
+              ]
+            : [],
+      });
 
       for (const { userId, playerName } of playerYamlList) {
         const user = this.client.users.cache.get(userId);
@@ -1373,8 +1427,7 @@ export class Archipelabot {
                   //const filename = `./yamls/${userId}/${msg.id}.yaml`;
                   const filepath = pathJoin("./yamls", userId);
                   const filename = pathJoin(filepath, msg.id + ".yaml");
-                  if (!existsSync("./yamls")) mkdirSync("./yamls");
-                  if (!existsSync(filepath)) mkdirSync(filepath);
+                  await mkdirIfNotExist(filepath);
 
                   const code = generateLetterCode(
                     (await YamlTable.findAll({ attributes: ["code"] })).map(
@@ -1460,6 +1513,13 @@ export class Archipelabot {
       channel.send(`Game ${code} not found.`);
       return;
     }
+    if (
+      gameData.active ||
+      (this.running[code] && this.running[code].state === GameState.Running)
+    ) {
+      channel.send(`Game ${code} is already running.`);
+      return;
+    }
 
     if (this.running[code]) {
       this.running[code] = Object.assign<RunningGame, Partial<RunningGame>>(
@@ -1514,6 +1574,11 @@ export class Archipelabot {
       embeds: [liveEmbed],
     });
 
+    const gamePath = pathJoin("./games", code);
+    const logout = createWriteStream(
+      pathJoin(gamePath, `${gameData.filename}.stdout.log`)
+    );
+
     const lastFiveLines: string[] = [];
     const apServer = spawn(
       PYTHON_PATH,
@@ -1522,11 +1587,12 @@ export class Archipelabot {
         "--port",
         port.toString(),
         "--use_embedded_options",
-        pathResolve(
-          pathJoin("./games", code, gameData.filename + ".archipelago")
-        ),
+        pathResolve(pathJoin(gamePath, gameData.filename + ".archipelago")),
       ],
       { cwd: AP_PATH }
+    );
+    apServer.stderr.pipe(
+      createWriteStream(pathJoin(gamePath, `${gameData.filename}.stderr.log`))
     );
 
     let lastUpdate = Date.now();
@@ -1542,18 +1608,24 @@ export class Archipelabot {
     };
 
     apServer.stdout.on("data", (data: Buffer) => {
-      lastFiveLines.push(...(data.toString().trim().split(/\n/)));
+      logout.write(data);
+      lastFiveLines.push(...data.toString().trim().split(/\n/));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
       if (!timeout) {
         const deltaLastUpdate = Date.now() - lastUpdate - 1000;
-        if (deltaLastUpdate < 0) 
+        if (deltaLastUpdate < 0)
           timeout = setTimeout(UpdateOutput, Math.abs(deltaLastUpdate));
         else UpdateOutput();
       }
     });
+    apServer.stdout.on("close", logout.close);
+
     apServer.on("close", (pcode) => {
+      if (timeout) clearTimeout(timeout);
       msg.edit({
-        content: `Server for game ${code} closed with code ${pcode}.`,
+        content: `Server for game ${code} closed ${
+          pcode === 0 ? "normally" : ` with error code ${pcode}`
+        }.`,
         embeds: [],
       });
       GameTable.update({ active: false }, { where: { code } });
@@ -1567,8 +1639,11 @@ export class Archipelabot {
         msgIn.reference?.messageId === msg.id &&
         msgIn.author.id === gameData.userId,
     });
-    msgCollector.on("collect", (msg) => {
-      apServer.stdin.write(msg.content.replace(/^\./, "/") + "\n");
+    msgCollector.on("collect", (msgIn) => {
+      apServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
+      lastFiveLines.push("←" + msgIn.content.replace(/^\./, "/"));
+      while (lastFiveLines.length > 5) lastFiveLines.shift();
+      if (msgIn.deletable) msgIn.delete;
     });
   }
 
@@ -1578,7 +1653,10 @@ export class Archipelabot {
         interaction.followUp({
           content: "Here you go.",
           files: [
-            { attachment: createReadStream(".yarnrc.yml"), name: "test.yaml" },
+            {
+              attachment: await readFile(".yarnrc.yml"),
+              name: "test.yaml",
+            },
           ],
         });
         break;
@@ -1603,6 +1681,41 @@ export class Archipelabot {
           }available.`
         );
         break;
+      case "spoiler":
+        {
+          const bigSpoiler = (
+            await readFile("./test/AP_51012885067020691880_Spoiler.txt")
+          ).toString();
+          const playerListing: RegExpExecArray[] = [];
+          const playerListingRegex = /Player (\d+): (.+)[\r\n]+Game:\s+(.*)/gm;
+
+          for (
+            let match = playerListingRegex.exec(bigSpoiler);
+            match !== null;
+            match = playerListingRegex.exec(bigSpoiler)
+          )
+            playerListing.push(match);
+
+          interaction.followUp({
+            content: `Testing reading the spoiler file for players.`,
+            embeds:
+              playerListing.length > 0
+                ? [
+                    new MessageEmbed({
+                      title: "Who's Playing What",
+                      description: playerListing
+                        .map((i) => `${i[1]}: ${i[2]} → **${i[3]}**`)
+                        .join("\n"),
+                    }),
+                  ]
+                : [],
+          });
+        }
+        break;
+      default:
+        interaction.followUp(
+          "Unrecognized subcommand. That shouldn't happen..."
+        );
     }
   };
 
