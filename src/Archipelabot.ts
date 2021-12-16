@@ -1338,8 +1338,8 @@ export class Archipelabot {
           content:
             (selectUsers.includes(userId)
               ? "Please select the YAML you wish to use from the dropdown box, or, alternatively, submit a new one by replying to this message with an attachment."
-              : "Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ") +
-            `If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
+              : "Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one.") +
+            ` If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
               Math.floor(Date.now() / 1000) + 30 * 60
             }:R>.`,
           components: [
@@ -1642,10 +1642,11 @@ export class Archipelabot {
     });
     msgCollector.on("collect", (msgIn) => {
       apServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
-      lastFiveLines.push("←" + msgIn.content.replace(/^\./, "/"));
+      lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
+
       if (msgIn.deletable) msgIn.delete();
-      else msgIn.react("👀");
+      else msgIn.react("⌨️");
     });
   }
 
