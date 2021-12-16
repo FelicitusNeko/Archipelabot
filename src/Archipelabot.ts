@@ -59,7 +59,8 @@ interface GameRecruitmentProcess {
   channelId: string;
   startingUser: string;
   reactionCollector?: ReactionCollector;
-  reactedUsers: string[];
+  defaultUsers: string[];
+  selectUsers: string[];
 }
 
 interface RunningGame {
@@ -947,24 +948,28 @@ export class Archipelabot {
                       title: "Multiworld Game Call",
                       description:
                         "React ⚔️ to join into this game with your default YAML.\n" +
-                        "Later, you will be able to react 🛡️ to join with a different YAML.",
+                        "React 🛡️ to join with a different YAML.",
                       footer: {
                         text: `Game code: ${gameCode}`,
                       },
                     }),
                   ],
                 })) as DiscordMessage;
-                msg.react("⚔️");
+                await msg.react('⚔️');
+                await msg.react('🛡️');
 
                 const newRecruit: GameRecruitmentProcess = {
                   msg,
                   guildId,
                   channelId,
                   startingUser,
-                  reactedUsers: [],
+                  defaultUsers: [],
+                  selectUsers: [],
                   reactionCollector: msg.createReactionCollector({
                     filter: (reaction, user) =>
-                      this.clientId !== user.id && reaction.emoji.name === "⚔️",
+                      this.clientId !== user.id &&
+                      reaction.emoji.name !== null &&
+                      ["⚔️", "🛡️"].includes(reaction.emoji.name),
                     dispose: true,
                   }),
                 };
@@ -972,21 +977,27 @@ export class Archipelabot {
 
                 const { reactionCollector } = newRecruit;
                 reactionCollector?.on("collect", (reaction, user) => {
-                  if (newRecruit && reaction.emoji.name === "⚔️")
-                    newRecruit.reactedUsers.push(user.id);
+                  if (reaction.emoji.name === "⚔️")
+                    newRecruit.defaultUsers.push(user.id);
+                  else if (reaction.emoji.name === "🛡️")
+                    newRecruit.selectUsers.push(user.id);
                 });
                 reactionCollector?.on("remove", (reaction, user) => {
-                  if (newRecruit && reaction.emoji.name === "⚔️")
-                    newRecruit.reactedUsers = newRecruit.reactedUsers.filter(
+                  if (reaction.emoji.name === "⚔️")
+                    newRecruit.defaultUsers = newRecruit.defaultUsers.filter(
+                      (i) => i != user.id
+                    );
+                  else if (reaction.emoji.name === "🛡️")
+                    newRecruit.selectUsers = newRecruit.selectUsers.filter(
                       (i) => i != user.id
                     );
                 });
                 reactionCollector?.on("dispose", (reaction) => {
                   // TODO: find out when this event fires (if it does)
                   console.debug("Dispose:" /*, reaction*/);
-                  if (newRecruit && reaction.emoji.name === "⚔️") {
+                  if (reaction.emoji.name === "⚔️") {
                     newRecruit.msg.react("⚔️");
-                    newRecruit.reactedUsers = [];
+                    newRecruit.defaultUsers = [];
                   }
                 });
                 reactionCollector?.on("end", async (_collected, reason) => {
@@ -1038,7 +1049,7 @@ export class Archipelabot {
                   ephemeral: true,
                   content: "You're not the person who launched this event!",
                 });
-              else if (this.recruit[guildId].reactedUsers.length === 0)
+              else if (this.recruit[guildId].defaultUsers.length + this.recruit[guildId].selectUsers.length === 0)
                 interaction.followUp({
                   ephemeral: true,
                   content:
@@ -1090,7 +1101,8 @@ export class Archipelabot {
     interaction: BaseCommandInteraction,
     recruitInfo: GameRecruitmentProcess
   ) {
-    recruitInfo.reactionCollector?.stop("aplaunch");
+    const { reactionCollector, defaultUsers, selectUsers } = recruitInfo;
+    reactionCollector?.stop("aplaunch");
 
     if (!PYTHON_PATH) {
       interaction.reply("Python path has not been defined! Game cannot start.");
@@ -1109,14 +1121,14 @@ export class Archipelabot {
     const defaultYamls = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
-        userId: { [SqlOp.in]: recruitInfo.reactedUsers },
+        userId: { [SqlOp.in]: defaultUsers },
         defaultCode: { [SqlOp.not]: null },
       },
     });
     const hasDefaults = defaultYamls.map((i) => i.userId);
-    const missingDefaults = recruitInfo.reactedUsers.filter(
-      (i) => !hasDefaults.includes(i)
-    );
+    const missingDefaults = defaultUsers
+      .filter((i) => !hasDefaults.includes(i))
+      .concat(selectUsers);
 
     const LaunchGame = async (
       incomingYamls?: [string, string][],
@@ -1219,7 +1231,7 @@ export class Archipelabot {
             if (gameMatch) playerListing.push(gameMatch);
           } else {
             const playerListingRegex =
-              /Player (\d+)+: (.+)[\r\n]Game:\s+(.*)/gm;
+              /Player (\d+)+: (.+)[\r\n]+Game:\s+(.*)/gm;
             for (
               let match = playerListingRegex.exec(spoilerDataString);
               match !== null;
@@ -1229,6 +1241,8 @@ export class Archipelabot {
           }
           return { attachment: spoilerData, name: i.name, spoiler: true };
         });
+
+      console.debug(playerListing);
 
       writeMsg({
         content:
@@ -1392,8 +1406,9 @@ export class Archipelabot {
             const code = subInt.values[0];
             if (code === "noyaml")
               subInt.update({
-                content:
-                  "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
+                content: selectUsers.includes(userId)
+                  ? "Please select the YAML you wish to use from the dropdown box, or, alternatively, submit a new one by replying to this message with an attachment."
+                  : "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
               });
             else {
               incomingYamls[userId] = code;
