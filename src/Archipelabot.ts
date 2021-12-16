@@ -22,6 +22,8 @@ import { Op as SqlOp } from "sequelize/dist";
 import * as YAML from "yaml";
 import * as AdmZip from "adm-zip";
 
+import { spawn } from "child_process";
+import { join as pathJoin, resolve as pathResolve, basename } from "path";
 import { get as httpsGet } from "https";
 import { createWriteStream, existsSync } from "fs";
 import {
@@ -37,9 +39,6 @@ import { GameTable, PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import * as gameList from "./gamelist.json";
-import { join as pathJoin, resolve as pathResolve } from "path";
-import { spawn } from "child_process";
-import { basename } from "path/posix";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
