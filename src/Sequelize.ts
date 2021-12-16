@@ -1,8 +1,8 @@
 import { Sequelize, DataTypes, Model } from "sequelize";
 
 const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: './apbot.sqlite'
+  dialect: "sqlite",
+  storage: "./apbot.sqlite",
 });
 
 interface YamlAttributes {
@@ -10,16 +10,16 @@ interface YamlAttributes {
   userId: string;
   filename: string;
   description: string;
-  playerName: string;
-  games: string;
+  playerName: string[];
+  games: string[];
 }
 class YamlTable extends Model<YamlAttributes, YamlAttributes> {
   public code!: string;
   public userId!: string;
   public filename!: string;
   public description!: string;
-  public playerName!: string;
-  public games!: string;
+  public playerName!: string[];
+  public games!: string[];
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -53,6 +53,7 @@ YamlTable.init(
     playerName: {
       type: DataTypes.JSON,
       allowNull: false,
+      defaultValue: ["Who?"],
     },
     games: {
       type: DataTypes.JSON,
@@ -146,7 +147,7 @@ GameTable.init(
     },
     filename: {
       type: DataTypes.STRING(64),
-      allowNull: false
+      allowNull: false,
     },
     active: {
       type: DataTypes.BOOLEAN,
