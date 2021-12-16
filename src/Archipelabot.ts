@@ -397,7 +397,7 @@ export class Archipelabot {
             r.map((i) => {
               return {
                 label: i.description,
-                description: (JSON.parse(i.games) as string[]).join(", "),
+                description: i.games.join(", "),
                 value: i.code,
                 emoji: i.code === playerEntry?.defaultCode ? "⚔️" : undefined,
               } as MessageSelectOptionData;
@@ -425,9 +425,7 @@ export class Archipelabot {
               fields: [
                 {
                   name: "Games",
-                  value:
-                    (JSON.parse(curEntry.games) as string[]).join(", ") ??
-                    "Unknown",
+                  value: curEntry.games.join(", ") ?? "Unknown",
                   inline: true,
                 },
                 {
@@ -506,9 +504,7 @@ export class Archipelabot {
                   const updateInfo = {
                     filename: `${msgIn.id}-u`,
                     description: validate.desc ?? "No description provided",
-                    games: JSON.stringify(
-                      validate.games ?? ["A Link to the Past"]
-                    ),
+                    games: validate.games ?? ["A Link to the Past"],
                   };
 
                   await YamlTable.update(updateInfo, {
@@ -548,10 +544,9 @@ export class Archipelabot {
                         userId,
                         filename: `${msgIn.id}-${x}`,
                         description: validate.desc ?? "No description provided",
-                        playerName: JSON.stringify(validate.name ?? ["Who?"]),
-                        games: JSON.stringify(
-                          validate.games ?? ["A Link to the Past"]
-                        ),
+                        //playerName: JSON.stringify(validate.name ?? ["Who?"]),
+                        playerName: validate.name ?? ["Who?"],
+                        games: validate.games ?? ["A Link to the Past"],
                       }),
                     ]);
                     usedCodes.push(code);
@@ -726,14 +721,12 @@ export class Archipelabot {
             )}. Please reply to this message with the YAML you wish to assign.`,
           })) as DiscordMessage;
 
-          //console.debug(interaction);
           const msgCollector = interaction.channel?.createMessageCollector({
             filter: (msgIn) =>
               msgIn.type === "REPLY" &&
               msgIn.reference?.messageId === msg.id &&
               msgIn.attachments.size > 0,
           });
-          //console.debug(msgCollector);
           msgCollector?.on("collect", (msgIn) => {
             const yamls = msgIn.attachments.filter(
               (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
@@ -769,8 +762,6 @@ export class Archipelabot {
                 });
             }
           });
-
-          //console.debug(targetUser);
         }
       } catch (e) {
         interaction.followUp({
@@ -829,13 +820,7 @@ export class Archipelabot {
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isButton()) return;
-      // console.debug(
-      //   subInt.user.id,
-      //   receivingUser.id,
-      //   subInt.user.id !== receivingUser.id
-      // );
       if (subInt.user.id !== receivingUser.id) return;
-      // console.debug(subInt.message.id, msg.id, subInt.message.id !== msg.id);
       if (subInt.message.id !== msg.id) return;
 
       let dismissListener = true;
@@ -868,8 +853,9 @@ export class Archipelabot {
                 userId: receivingUser.id,
                 filename: `${msg.id}`,
                 description: yamlData.desc ?? "No description provided",
-                playerName: JSON.stringify(yamlData.name ?? ["Who?"]),
-                games: JSON.stringify(yamlData.games ?? ["A Link to the Past"]),
+                //playerName: JSON.stringify(yamlData.name ?? ["Who?"]),
+                playerName: yamlData.name ?? ["Who?"],
+                games: yamlData.games ?? ["A Link to the Past"],
               }),
             ]);
 
@@ -954,8 +940,8 @@ export class Archipelabot {
                     }),
                   ],
                 })) as DiscordMessage;
-                await msg.react('⚔️');
-                await msg.react('🛡️');
+                await msg.react("⚔️");
+                await msg.react("🛡️");
 
                 const newRecruit: GameRecruitmentProcess = {
                   msg,
@@ -1001,7 +987,6 @@ export class Archipelabot {
                 });
                 reactionCollector?.on("end", async (_collected, reason) => {
                   if (["aplaunch", "apcancel"].includes(reason)) {
-                    // console.debug(newRecruit.reactedUsers);
                     await newRecruit.msg.delete();
                     delete this.recruit[newRecruit.guildId];
                   }
@@ -1048,7 +1033,11 @@ export class Archipelabot {
                   ephemeral: true,
                   content: "You're not the person who launched this event!",
                 });
-              else if (this.recruit[guildId].defaultUsers.length + this.recruit[guildId].selectUsers.length === 0)
+              else if (
+                this.recruit[guildId].defaultUsers.length +
+                  this.recruit[guildId].selectUsers.length ===
+                0
+              )
                 interaction.followUp({
                   ephemeral: true,
                   content:
@@ -1238,16 +1227,17 @@ export class Archipelabot {
             )
               playerListing.push(match);
           }
-          return { attachment: spoilerData, name: i.name, spoiler: true };
+          //return { attachment: spoilerData, name: i.name } as MessageAttachment;
+          return new MessageAttachment(spoilerData)
+            .setName(i.name)
+            .setSpoiler(true);
         });
-
-      console.debug(playerListing);
 
       writeMsg({
         content:
           `Game ${code} has been generated. Players: ` +
           playerList.map((i) => userMention(i[0])).join(", "),
-        files: spoiler,
+        files: spoiler.map((i) => i.setSpoiler(true)),
         embeds:
           playerListing.length > 0
             ? [
@@ -1268,10 +1258,10 @@ export class Archipelabot {
         const user = this.client.users.cache.get(userId);
         if (!user) continue;
 
-        const playerNames: string[] = JSON.parse(playerName);
+        //const playerNames: string[] = JSON.parse(playerName);
         const playerFile = gameZipEntries
           .filter((i) => {
-            for (const name of playerNames)
+            for (const name of playerName) 
               if (i.name.indexOf(name) > 0) return true;
             return false;
           })
@@ -1319,11 +1309,6 @@ export class Archipelabot {
       )) as DiscordMessage;
 
       const CheckPlayerResponses = () => {
-        console.debug(
-          Object.keys(incomingYamls).length,
-          missingDefaults.length,
-          Object.keys(incomingYamls).length === missingDefaults.length
-        );
         if (Object.keys(incomingYamls).length === missingDefaults.length) {
           msg.edit(
             "Everyone's responses have been received. Now generating the game..."
@@ -1349,7 +1334,9 @@ export class Archipelabot {
 
         const msg = (await user.send({
           content:
-            `Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ` +
+            (selectUsers.includes(userId)
+              ? "Please select the YAML you wish to use from the dropdown box, or, alternatively, submit a new one by replying to this message with an attachment."
+              : "Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one. ") +
             `If you've changed your mind, you can click on "Withdraw". This message will time out <t:${
               Math.floor(Date.now() / 1000) + 30 * 60
             }:R>.`,
@@ -1364,9 +1351,7 @@ export class Archipelabot {
                       ? yamls.map((i) => {
                           return {
                             label: i.description,
-                            description: (JSON.parse(i.games) as string[]).join(
-                              ", "
-                            ),
+                            description: i.games.join(", "),
                             value: i.code,
                           } as MessageSelectOptionData;
                         })
@@ -1405,9 +1390,8 @@ export class Archipelabot {
             const code = subInt.values[0];
             if (code === "noyaml")
               subInt.update({
-                content: selectUsers.includes(userId)
-                  ? "Please select the YAML you wish to use from the dropdown box, or, alternatively, submit a new one by replying to this message with an attachment."
-                  : "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
+                content:
+                  "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
               });
             else {
               incomingYamls[userId] = code;
@@ -1456,11 +1440,10 @@ export class Archipelabot {
                     YamlTable.create({
                       code,
                       userId,
-                      playerName: JSON.stringify(validate.name ?? ["Who?"]),
+                      //playerName: JSON.stringify(validate.name ?? ["Who?"]),
+                      playerName: validate.name ?? ["Who?"],
                       description: validate.desc ?? "No description given",
-                      games: JSON.stringify(
-                        validate.games ?? ["A Link to the Past"]
-                      ),
+                      games: validate.games ?? ["A Link to the Past"],
                       filename: msg.id,
                     }),
                     writeFile(filename, validate.data),
@@ -1484,6 +1467,7 @@ export class Archipelabot {
         });
         msgCollector.on("end", (_collected, reason) => {
           const finallyMsg = (() => {
+            console.info(`${code}: ${user.username} responded ${reason}`);
             switch (reason) {
               case "time":
                 return "Sorry, this YAML request has timed out.";
