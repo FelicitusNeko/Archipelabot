@@ -563,6 +563,7 @@ export class Archipelabot {
               }
 
               if (msgIn.deletable) msgIn.delete();
+              else msgIn.react("👀");
             })
             .catch((e) => {
               msg.edit("An error occurred. Check debug log.");
@@ -755,6 +756,7 @@ export class Archipelabot {
                   }
 
                   if (msgIn.deletable) msgIn.delete();
+                  else msgIn.react("👀");
                 })
                 .catch((e) => {
                   msg.edit("An error occurred. Check debug log.");
@@ -1261,7 +1263,7 @@ export class Archipelabot {
         //const playerNames: string[] = JSON.parse(playerName);
         const playerFile = gameZipEntries
           .filter((i) => {
-            for (const name of playerName) 
+            for (const name of playerName)
               if (i.name.indexOf(name) > 0) return true;
             return false;
           })
@@ -1458,6 +1460,7 @@ export class Archipelabot {
                 }
 
                 if (msgIn.deletable) msgIn.delete();
+                else msgIn.react("👀");
               })
               .catch((e) => {
                 msg.edit("An error occurred. Check debug log.");
@@ -1641,7 +1644,8 @@ export class Archipelabot {
       apServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
       lastFiveLines.push("←" + msgIn.content.replace(/^\./, "/"));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
-      if (msgIn.deletable) msgIn.delete;
+      if (msgIn.deletable) msgIn.delete();
+      else msgIn.react("👀");
     });
   }
 
