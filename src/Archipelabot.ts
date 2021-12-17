@@ -473,23 +473,24 @@ export class Archipelabot {
         components: [yamlRow],
       };
 
-      const msg = await (async () => {
-        if (interaction.channel) return interaction.followUp(
-          Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
-            { ephemeral: true },
-            startingState
-          )
-        );
+      const msg = (await (async () => {
+        if (interaction.channel)
+          return interaction.followUp(
+            Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
+              { ephemeral: true },
+              startingState
+            )
+          );
         else {
-          await interaction.followUp('Okay, YAML manager. One sec...');
+          await interaction.followUp("Okay, YAML manager. One sec...");
           return interaction.user.send(
             Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
               { ephemeral: true },
               startingState
             )
-          )
+          );
         }
-      })() as DiscordMessage;
+      })()) as DiscordMessage;
 
       const msgCollector = msg.channel.createMessageCollector({
         filter: (msgIn) =>
@@ -497,8 +498,12 @@ export class Archipelabot {
           msgIn.reference?.messageId === msg.id &&
           msgIn.attachments.size > 0,
       });
-      console.debug(`Message collector for YAML manager is ${msgCollector ? 'active' : 'broken'}.`)
-      msgCollector?.on("collect", (msgIn) => {
+      console.debug(
+        `Message collector for YAML manager is ${
+          msgCollector ? "active" : "broken"
+        }.`
+      );
+      msgCollector.on("collect", (msgIn) => {
         ResetTimeout();
         const yamls = msgIn.attachments.filter(
           (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
@@ -582,7 +587,7 @@ export class Archipelabot {
             });
         }
       });
-      msgCollector?.on("end", (_collected, reason) => {
+      msgCollector.on("end", (_collected, reason) => {
         if (reason === "time")
           msg.edit({ content: "Timed out.", embeds: [], components: [] });
         //else _msg.edit(`Check debug output. Reason: ${reason}`)
@@ -725,7 +730,7 @@ export class Archipelabot {
         if (!targetUser.value || !targetUser.user)
           throw new Error("Failed to resolve user");
         else {
-          const msg = await (async () => {
+          const msg = (await (async () => {
             const supervisorMsg = {
               ephemeral: true,
               content: `Assigning a YAML to ${userMention(
@@ -734,11 +739,10 @@ export class Archipelabot {
             };
             if (interaction.channel) return interaction.followUp(supervisorMsg);
             else {
-              await interaction.followUp('Okay, YAML supervisor. One sec...');
+              await interaction.followUp("Okay, YAML supervisor. One sec...");
               return interaction.user.send(supervisorMsg);
             }
-          })() as DiscordMessage;
-
+          })()) as DiscordMessage;
 
           const msgCollector = msg.channel.createMessageCollector({
             filter: (msgIn) =>
@@ -1129,7 +1133,9 @@ export class Archipelabot {
     const defaultYamls = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
-        userId: { [SqlOp.in]: defaultUsers.filter(i => !selectUsers.includes(i)) },
+        userId: {
+          [SqlOp.in]: defaultUsers.filter((i) => !selectUsers.includes(i)),
+        },
         defaultCode: { [SqlOp.not]: null },
       },
     });
@@ -1163,12 +1169,13 @@ export class Archipelabot {
         return;
       }
 
-      const playersDir = pathJoin(AP_PATH, "Players");
-      await mkdirIfNotExist(playersDir);
-      await readdir(playersDir, { withFileTypes: true }).then((files) =>
+      await mkdirIfNotExist(pathJoin(AP_PATH, "Players"));
+      const yamlPath = pathJoin(AP_PATH, "Players", code);
+      await mkdirIfNotExist(yamlPath);
+      await readdir(yamlPath, { withFileTypes: true }).then((files) =>
         files
           .filter((i) => !i.isDirectory())
-          .forEach((i) => unlink(pathJoin(playersDir, i.name)))
+          .forEach((i) => unlink(pathJoin(yamlPath, i.name)))
       );
 
       const playerYamlList = await YamlTable.findAll({
@@ -1176,11 +1183,12 @@ export class Archipelabot {
         where: { code: { [SqlOp.in]: playerList.map((i) => i[1]) } },
       });
 
+      //const yamlPath = path.join
       await Promise.all(
         playerYamlList.map((i) =>
           copyFile(
             `./yamls/${i.userId}/${i.filename}.yaml`,
-            pathJoin(playersDir, `${i.filename}.yaml`)
+            pathJoin(yamlPath, `${i.filename}.yaml`)
           )
         )
       );
@@ -1189,7 +1197,13 @@ export class Archipelabot {
       const outputFile = await new Promise<string>((f, r) => {
         const pyApProcess = spawn(
           PYTHON_PATH,
-          ["Generate.py", "--outputpath", pathResolve(outputPath)],
+          [
+            "Generate.py",
+            "--player_files_path",
+            pathResolve(yamlPath),
+            "--outputpath",
+            pathResolve(outputPath),
+          ],
           { cwd: AP_PATH, windowsHide: true }
         );
         let outData = "";
