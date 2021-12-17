@@ -1281,7 +1281,7 @@ export class Archipelabot {
                     playerListing.length === 1
                       ? `It's only you for this one, and you'll be playing **${playerListing[0][1]}**.`
                       : playerListing
-                          .map((i) => `${i[2]} → ${i[3]}`)
+                          .map((i) => `${i[2]} → **${i[3]}**`)
                           .join("\n"),
                 }),
               ]
