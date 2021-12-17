@@ -1,6 +1,6 @@
 {
   "name": "archipelabot",
-  "version": "0.2",
+  "version": "0.8",
   "description": "Manages Archipelago instances and required YAML config files over Discord.",
   "author": {
     "name": "KewlioMZX"
@@ -15,6 +15,7 @@
     "start": "node -r dotenv/config ./lib/index.js",
     "build": "tsc",
     "lint": "tslint -c tslint.json src/**/*.ts",
+    "bstart": "yarn build && yarn start",
     "prepublish": "yarn build"
   },
   "dependencies": {
