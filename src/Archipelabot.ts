@@ -57,7 +57,7 @@ interface GameRecruitmentProcess {
   guildId: string;
   channelId: string;
   startingUser: string;
-  reactionCollector?: ReactionCollector;
+  reactionCollector: ReactionCollector;
   defaultUsers: string[];
   selectUsers: string[];
 }
@@ -473,19 +473,31 @@ export class Archipelabot {
         components: [yamlRow],
       };
 
-      const msg = (await interaction.followUp(
-        Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
-          { ephemeral: true },
-          startingState
-        )
-      )) as DiscordMessage;
+      const msg = await (async () => {
+        if (interaction.channel) return interaction.followUp(
+          Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
+            { ephemeral: true },
+            startingState
+          )
+        );
+        else {
+          await interaction.followUp('Okay, YAML manager. One sec...');
+          return interaction.user.send(
+            Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
+              { ephemeral: true },
+              startingState
+            )
+          )
+        }
+      })() as DiscordMessage;
 
-      const msgCollector = interaction.channel?.createMessageCollector({
+      const msgCollector = msg.channel.createMessageCollector({
         filter: (msgIn) =>
           msgIn.type === "REPLY" &&
           msgIn.reference?.messageId === msg.id &&
           msgIn.attachments.size > 0,
       });
+      console.debug(`Message collector for YAML manager is ${msgCollector ? 'active' : 'broken'}.`)
       msgCollector?.on("collect", (msgIn) => {
         ResetTimeout();
         const yamls = msgIn.attachments.filter(
@@ -544,7 +556,6 @@ export class Archipelabot {
                         userId,
                         filename: `${msgIn.id}-${x}`,
                         description: validate.desc ?? "No description provided",
-                        //playerName: JSON.stringify(validate.name ?? ["Who?"]),
                         playerName: validate.name ?? ["Who?"],
                         games: validate.games ?? ["A Link to the Past"],
                       }),
@@ -714,21 +725,28 @@ export class Archipelabot {
         if (!targetUser.value || !targetUser.user)
           throw new Error("Failed to resolve user");
         else {
-          //const beginner = interaction.options.get("beginner", false);
-          const msg = (await interaction.followUp({
-            ephemeral: true,
-            content: `Assigning a YAML to ${userMention(
-              targetUser.value as string
-            )}. Please reply to this message with the YAML you wish to assign.`,
-          })) as DiscordMessage;
+          const msg = await (async () => {
+            const supervisorMsg = {
+              ephemeral: true,
+              content: `Assigning a YAML to ${userMention(
+                targetUser.value as string
+              )}. Please reply to this message with the YAML you wish to assign.`,
+            };
+            if (interaction.channel) return interaction.followUp(supervisorMsg);
+            else {
+              await interaction.followUp('Okay, YAML supervisor. One sec...');
+              return interaction.user.send(supervisorMsg);
+            }
+          })() as DiscordMessage;
 
-          const msgCollector = interaction.channel?.createMessageCollector({
+
+          const msgCollector = msg.channel.createMessageCollector({
             filter: (msgIn) =>
               msgIn.type === "REPLY" &&
               msgIn.reference?.messageId === msg.id &&
               msgIn.attachments.size > 0,
           });
-          msgCollector?.on("collect", (msgIn) => {
+          msgCollector.on("collect", (msgIn) => {
             const yamls = msgIn.attachments.filter(
               (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
             );
@@ -963,13 +981,13 @@ export class Archipelabot {
                 this.recruit[guildId] = newRecruit;
 
                 const { reactionCollector } = newRecruit;
-                reactionCollector?.on("collect", (reaction, user) => {
+                reactionCollector.on("collect", (reaction, user) => {
                   if (reaction.emoji.name === "⚔️")
                     newRecruit.defaultUsers.push(user.id);
                   else if (reaction.emoji.name === "🛡️")
                     newRecruit.selectUsers.push(user.id);
                 });
-                reactionCollector?.on("remove", (reaction, user) => {
+                reactionCollector.on("remove", (reaction, user) => {
                   if (reaction.emoji.name === "⚔️")
                     newRecruit.defaultUsers = newRecruit.defaultUsers.filter(
                       (i) => i != user.id
@@ -979,7 +997,7 @@ export class Archipelabot {
                       (i) => i != user.id
                     );
                 });
-                reactionCollector?.on("dispose", (reaction) => {
+                reactionCollector.on("dispose", (reaction) => {
                   // TODO: find out when this event fires (if it does)
                   console.debug("Dispose:" /*, reaction*/);
                   if (reaction.emoji.name === "⚔️") {
@@ -987,7 +1005,7 @@ export class Archipelabot {
                     newRecruit.defaultUsers = [];
                   }
                 });
-                reactionCollector?.on("end", async (_collected, reason) => {
+                reactionCollector.on("end", async (_collected, reason) => {
                   if (["aplaunch", "apcancel"].includes(reason)) {
                     await newRecruit.msg.delete();
                     delete this.recruit[newRecruit.guildId];
@@ -1092,7 +1110,7 @@ export class Archipelabot {
     recruitInfo: GameRecruitmentProcess
   ) {
     const { reactionCollector, defaultUsers, selectUsers } = recruitInfo;
-    reactionCollector?.stop("aplaunch");
+    reactionCollector.stop("aplaunch");
 
     if (!PYTHON_PATH) {
       interaction.reply("Python path has not been defined! Game cannot start.");
