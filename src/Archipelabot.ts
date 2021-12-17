@@ -1129,13 +1129,13 @@ export class Archipelabot {
     const defaultYamls = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
-        userId: { [SqlOp.in]: defaultUsers },
+        userId: { [SqlOp.in]: defaultUsers.filter(i => !selectUsers.includes(i)) },
         defaultCode: { [SqlOp.not]: null },
       },
     });
     const hasDefaults = defaultYamls.map((i) => i.userId);
     const missingDefaults = defaultUsers
-      .filter((i) => !hasDefaults.includes(i))
+      .filter((i) => !hasDefaults.includes(i) && !selectUsers.includes(i))
       .concat(selectUsers);
 
     const LaunchGame = async (
