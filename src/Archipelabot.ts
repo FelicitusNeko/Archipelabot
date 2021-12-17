@@ -309,26 +309,26 @@ export class Archipelabot {
         ],
         run: this.cmdAPGame,
       },
-      {
-        name: "test",
-        description: "Testing commands",
-        type: "CHAT_INPUT",
-        options: [
-          {
-            type: ApplicationCommandOptionTypes.STRING,
-            name: "run",
-            description: "What test to run.",
-            choices: [
-              { name: "Send file", value: "sendfile" },
-              { name: "ZIP", value: "zip" },
-              { name: "Port detection", value: "port" },
-              { name: "Long embeds/spoiler parsing", value: "spoiler" },
-            ],
-            required: true,
-          },
-        ],
-        run: this.cmdTest,
-      },
+      // {
+      //   name: "test",
+      //   description: "Testing commands",
+      //   type: "CHAT_INPUT",
+      //   options: [
+      //     {
+      //       type: ApplicationCommandOptionTypes.STRING,
+      //       name: "run",
+      //       description: "What test to run.",
+      //       choices: [
+      //         { name: "Send file", value: "sendfile" },
+      //         { name: "ZIP", value: "zip" },
+      //         { name: "Port detection", value: "port" },
+      //         { name: "Long embeds/spoiler parsing", value: "spoiler" },
+      //       ],
+      //       required: true,
+      //     },
+      //   ],
+      //   run: this.cmdTest,
+      // },
     ];
 
     this.client.once("ready", () => {
