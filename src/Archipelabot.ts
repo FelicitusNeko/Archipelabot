@@ -254,12 +254,6 @@ export class Archipelabot {
 
     this.cmds = [
       {
-        name: "hello",
-        description: "Returns a greeting",
-        type: "CHAT_INPUT",
-        run: this.cmdHello,
-      },
-      {
         name: "yaml",
         description: "Manage YAML configuration files",
         type: "CHAT_INPUT",
@@ -372,13 +366,6 @@ export class Archipelabot {
     mkdirIfNotExist("./games");
 
     this.client.login((botConf as BotConf).discord.token);
-  }
-
-  async cmdHello(interaction: BaseCommandInteraction) {
-    await interaction.followUp({
-      ephemeral: true,
-      content: "Hello there!",
-    });
   }
 
   cmdYaml = async (interaction: BaseCommandInteraction) => {
@@ -512,16 +499,17 @@ export class Archipelabot {
         else {
           Promise.all(yamls.map((i) => getFile(i.url)))
             .then(async (i) => {
-              const userDir = `./yamls/${userId}`;
+              const userDir = pathJoin('./yamls', userId);
               if (curEntry) {
                 // Edit an existing YAML
                 const validate = quickValidateYaml(i[0]);
                 if (!validate.error) {
-                  await writeFile(`${userDir}/${msgIn.id}-u.yaml`, i[0]);
+                  await writeFile(pathJoin(userDir, `${msgIn.id}-u.yaml`), i[0]);
                   const updateInfo = {
                     filename: `${msgIn.id}-u`,
                     description: validate.desc ?? "No description provided",
                     games: validate.games ?? ["A Link to the Past"],
+                    playerName: validate.name,
                   };
 
                   await YamlTable.update(updateInfo, {
