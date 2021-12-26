@@ -42,14 +42,14 @@ import * as gameList from "./gamelist.json";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
-interface Command extends ChatInputApplicationCommandData {
-  run: (interaction: BaseCommandInteraction) => Promise<void>;
-}
-
 enum GameState {
   Assembling,
   Running,
   Stopped,
+}
+
+interface Command extends ChatInputApplicationCommandData {
+  run: (interaction: BaseCommandInteraction) => Promise<void>;
 }
 
 interface GameRecruitmentProcess {
@@ -499,12 +499,15 @@ export class Archipelabot {
         else {
           Promise.all(yamls.map((i) => getFile(i.url)))
             .then(async (i) => {
-              const userDir = pathJoin('./yamls', userId);
+              const userDir = pathJoin("./yamls", userId);
               if (curEntry) {
                 // Edit an existing YAML
                 const validate = quickValidateYaml(i[0]);
                 if (!validate.error) {
-                  await writeFile(pathJoin(userDir, `${msgIn.id}-u.yaml`), i[0]);
+                  await writeFile(
+                    pathJoin(userDir, `${msgIn.id}-u.yaml`),
+                    i[0]
+                  );
                   const updateInfo = {
                     filename: `${msgIn.id}-u`,
                     description: validate.desc ?? "No description provided",
@@ -1197,9 +1200,25 @@ export class Archipelabot {
         let outData = "";
         let errData = "";
 
-        pyApProcess.stdout.on("data", (data) => (outData += data));
-        pyApProcess.stderr.on("data", (data) => (errData += data));
+        const logout = createWriteStream(
+          pathJoin(outputPath, `${code}-gen.stdout.log`)
+        );
+        const logerr = createWriteStream(
+          pathJoin(outputPath, `${code}-gen.stderr.log`)
+        );
+
+        pyApProcess.stdout.on("data", (data) => {
+          logout.write(data);
+          outData += data;
+        });
+        pyApProcess.stderr.on("data", (data) => {
+          logerr.write(data);
+          errData += data;
+        });
         pyApProcess.on("close", (code) => {
+          logout.close();
+          logerr.close();
+
           if (code === 0) {
             const outputFile = /(AP_\d+\.zip)/.exec(outData);
             if (!outputFile || !outputFile[1])
@@ -1601,7 +1620,7 @@ export class Archipelabot {
     );
 
     const lastFiveLines: string[] = [];
-    const apServer = spawn(
+    const pyApServer = spawn(
       PYTHON_PATH,
       [
         "MultiServer.py",
@@ -1612,7 +1631,7 @@ export class Archipelabot {
       ],
       { cwd: AP_PATH }
     );
-    apServer.stderr.pipe(
+    pyApServer.stderr.pipe(
       createWriteStream(pathJoin(gamePath, `${gameData.filename}.stderr.log`))
     );
 
@@ -1628,7 +1647,7 @@ export class Archipelabot {
       timeout = undefined;
     };
 
-    apServer.stdout.on("data", (data: Buffer) => {
+    pyApServer.stdout.on("data", (data: Buffer) => {
       logout.write(data);
       lastFiveLines.push(...data.toString().trim().split(/\n/));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
@@ -1639,9 +1658,9 @@ export class Archipelabot {
         else UpdateOutput();
       }
     });
-    apServer.stdout.on("close", logout.close);
+    pyApServer.stdout.on("close", logout.close);
 
-    apServer.on("close", (pcode) => {
+    pyApServer.on("close", (pcode) => {
       if (timeout) clearTimeout(timeout);
       msg.edit({
         content: `Server for game ${code} closed ${
@@ -1661,7 +1680,7 @@ export class Archipelabot {
         msgIn.author.id === gameData.userId,
     });
     msgCollector.on("collect", (msgIn) => {
-      apServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
+      pyApServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
       lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
 
