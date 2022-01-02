@@ -1186,7 +1186,7 @@ export class Archipelabot {
 
       const outputPath = pathJoin("./games", code);
       const outputFile = await new Promise<string>((f, r) => {
-        const pyApProcess = spawn(
+        const pyApGenerate = spawn(
           PYTHON_PATH,
           [
             "Generate.py",
@@ -1207,15 +1207,17 @@ export class Archipelabot {
           pathJoin(outputPath, `${code}-gen.stderr.log`)
         );
 
-        pyApProcess.stdout.on("data", (data) => {
+        pyApGenerate.stdout.on("data", (data: Buffer) => {
           logout.write(data);
           outData += data;
+          if (data.toString().includes('press enter to install it')) pyApGenerate.stdin.write('\n');
         });
-        pyApProcess.stderr.on("data", (data) => {
+        pyApGenerate.stderr.on("data", (data: Buffer) => {
           logerr.write(data);
           errData += data;
+          if (data.toString().includes('press enter to install it')) pyApGenerate.stdin.write('\n');
         });
-        pyApProcess.on("close", (code) => {
+        pyApGenerate.on("close", (code: number) => {
           logout.close();
           logerr.close();
 
@@ -1657,6 +1659,7 @@ export class Archipelabot {
           timeout = setTimeout(UpdateOutput, Math.abs(deltaLastUpdate));
         else UpdateOutput();
       }
+      if (data.toString().includes('press enter to install it')) pyApServer.stdin.write('\n');
     });
     pyApServer.stdout.on("close", logout.close);
 
