@@ -80,7 +80,7 @@ interface YamlData {
 }
 
 const mkdirIfNotExist = (path: string): Promise<void> =>
-  !existsSync(path) ? mkdir(path) : Promise.resolve();
+  !existsSync(pathResolve(path)) ? mkdir(pathResolve(path)) : Promise.resolve();
 
 const getFile = (url: string) => {
   return new Promise<string>((f, r) => {
@@ -1185,6 +1185,7 @@ export class Archipelabot {
       );
 
       const outputPath = pathJoin("./games", code);
+      await mkdirIfNotExist(outputPath);
       const outputFile = await new Promise<string>((f, r) => {
         const pyApGenerate = spawn(
           PYTHON_PATH,
