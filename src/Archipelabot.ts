@@ -23,9 +23,14 @@ import * as YAML from "yaml";
 import * as AdmZip from "adm-zip";
 
 import { spawn } from "child_process";
-import { join as pathJoin, resolve as pathResolve, basename } from "path";
+import {
+  join as pathJoin,
+  resolve as pathResolve,
+  sep as pathSep,
+  basename,
+} from "path";
 import { get as httpsGet } from "https";
-import { createWriteStream, existsSync } from "fs";
+import { createWriteStream, existsSync, readdirSync } from "fs";
 import {
   copyFile,
   mkdir,
@@ -323,6 +328,24 @@ export class Archipelabot {
       //   ],
       //   run: this.cmdTest,
       // },
+      {
+        name: "admin",
+        description: "Administrative functions.",
+        type: "CHAT_INPUT",
+        options: [
+          {
+            type: ApplicationCommandOptionTypes.STRING,
+            name: "subcommand",
+            description: "What subcommand to run.",
+            choices: [
+              { name: "Clean YAMLs", value: "cleanyaml" },
+              { name: "Purge games older than 2 weeks", value: "purgegame" },
+            ],
+            required: true,
+          },
+        ],
+        run: this.cmdAdmin,
+      },
     ];
 
     this.client.once("ready", () => {
@@ -353,7 +376,7 @@ export class Archipelabot {
                 new MessageEmbed({
                   title: "Error content",
                   description: (e as Error).message,
-                  timestamp: Date.now() / 1000,
+                  timestamp: Date.now(),
                 }),
               ],
             });
@@ -1207,16 +1230,30 @@ export class Archipelabot {
         const logerr = createWriteStream(
           pathJoin(outputPath, `${code}-gen.stderr.log`)
         );
+        let errTimeout: NodeJS.Timeout | undefined = undefined;
 
         pyApGenerate.stdout.on("data", (data: Buffer) => {
           logout.write(data);
           outData += data;
-          if (data.toString().includes('press enter to install it')) pyApGenerate.stdin.write('\n');
+          if (data.toString().includes("press enter to install it"))
+            pyApGenerate.stdin.write("\n");
+          if (errTimeout) {
+            clearTimeout(errTimeout);
+            errTimeout = undefined;
+          }
         });
         pyApGenerate.stderr.on("data", (data: Buffer) => {
           logerr.write(data);
           errData += data;
-          if (data.toString().includes('press enter to install it')) pyApGenerate.stdin.write('\n');
+          if (data.toString().includes("press enter to install it"))
+            pyApGenerate.stdin.write("\n");
+          else {
+            if (errTimeout) clearTimeout(errTimeout);
+            errTimeout = setTimeout(() => {
+              pyApGenerate.stdin.write("\n");
+              errTimeout = undefined;
+            }, 3000);
+          }
         });
         pyApGenerate.on("close", (code: number) => {
           logout.close();
@@ -1660,7 +1697,8 @@ export class Archipelabot {
           timeout = setTimeout(UpdateOutput, Math.abs(deltaLastUpdate));
         else UpdateOutput();
       }
-      if (data.toString().includes('press enter to install it')) pyApServer.stdin.write('\n');
+      if (data.toString().includes("press enter to install it"))
+        pyApServer.stdin.write("\n");
     });
     pyApServer.stdout.on("close", logout.close);
 
@@ -1765,8 +1803,103 @@ export class Archipelabot {
     }
   };
 
-  /*
-  async generateGame(channel: string, users: string[]) {
-  }
-  */
+  cmdAdmin = async (interaction: BaseCommandInteraction) => {
+    // TODO: Make sure user running command is an admin (hard-coded to me for now)
+    if (interaction.user.id !== "475120074621976587") {
+      interaction.followUp({
+        ephemeral: true,
+        content: "You're not a bot admin!",
+      });
+      return;
+    }
+
+    switch (interaction.options.get("subcommand", true).value as string) {
+      case "cleanyaml":
+        {
+          const [yamlDb, yamlFiles] = await Promise.all([
+            YamlTable.findAll().then((i) =>
+              i.map((ii) => pathJoin("yamls", ii.userId, `${ii.filename}.yaml`))
+            ),
+            readdir("yamls", { withFileTypes: true }).then((yamlDir) =>
+              yamlDir
+                .filter((yamlUserDir) => yamlUserDir.isDirectory)
+                .map((yamlUserDir) =>
+                  readdirSync(pathJoin("yamls", yamlUserDir.name))
+                    .filter((yamlFile) => yamlFile.endsWith(".yaml"))
+                    .map((yamlFile) =>
+                      pathJoin("yamls", yamlUserDir.name, yamlFile)
+                    )
+                )
+                .flat()
+            ),
+          ]);
+          /** The list of files that are in common between the database and the file store. */
+          const yamlCommon = yamlDb.filter((i) => yamlFiles.includes(i));
+
+          /** The number of database entries pruned. */
+          const dbPrune = yamlDb.length - yamlCommon.length,
+            /** The number of file entries pruned. */
+            filePrune = yamlFiles.length - yamlCommon.length;
+
+          if (filePrune > 0) {
+            // First, unlink orphaned files
+            for (const file of yamlFiles.filter((i) => !yamlCommon.includes(i)))
+              await unlink(file);
+          }
+
+          if (dbPrune > 0) {
+            // Then, deal with cleaning the database
+            /** The data to be used for cleaning the database. */
+            const dbCleanup: Record<string, string[]> = {};
+            // first here, parse the file list
+            for (const file of yamlDb
+              .filter((i) => !yamlCommon.includes(i))
+              .map((i) => i.split(pathSep).slice(1))) {
+              if (!dbCleanup[file[0]]) dbCleanup[file[0]] = [file[1]];
+              else dbCleanup[file[0]].push(file[1]);
+            }
+            console.debug(dbCleanup);
+            // then, remove any users that don't have any files (otherwise, they wouldn't get pruned at all)
+            await YamlTable.destroy({
+              where: { userId: { notIn: Object.keys(dbCleanup) } },
+            });
+            // finally, remove missing entries for users
+            for (const op of Object.entries(dbCleanup)) {
+              await YamlTable.destroy({
+                where: {
+                  userId: op[0],
+                  filename: { notIn: op[1].map((i) => basename(i, ".yaml")) },
+                },
+              });
+            }
+          }
+
+          // finally, clear any invalid defaults
+          await PlayerTable.update(
+            { defaultCode: null },
+            {
+              where: {
+                defaultCode: {
+                  notIn: (
+                    await YamlTable.findAll({ attributes: ["code"] })
+                  ).map((i) => i.code),
+                },
+              },
+            }
+          );
+
+          interaction.followUp(
+            `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s).`
+          );
+        }
+        break;
+      case "purgegame":
+        interaction.followUp("Not implemented yet.");
+        break;
+      default:
+        interaction.followUp(
+          "Unrecognized subcommand. That shouldn't happen..."
+        );
+    }
+  };
 }
