@@ -1,6 +1,6 @@
 {
   "name": "archipelabot",
-  "version": "0.8",
+  "version": "0.8.1",
   "description": "Manages Archipelago instances and required YAML config files over Discord.",
   "author": {
     "name": "KewlioMZX"
