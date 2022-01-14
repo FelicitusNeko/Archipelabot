@@ -400,7 +400,8 @@ export class Archipelabot {
     if (!subcommand || subcommand.value === "manage") {
       const updateYamlList = async () => {
         const playerEntry =
-          (await PlayerTable.findOne({ where: { userId } })) ??
+          //(await PlayerTable.findOne({ where: { userId } })) ??
+          (await PlayerTable.findByPk(userId)) ??
           (await PlayerTable.create({ userId, defaultCode: null }));
         const retval = await YamlTable.findAll({ where: { userId } }).then(
           (r) =>
@@ -620,16 +621,18 @@ export class Archipelabot {
             });
             return;
           }
-          curEntry = await YamlTable.findOne({
-            where: { code: subInt.values[0] },
-          });
+          // curEntry = await YamlTable.findOne({
+          //   where: { code: subInt.values[0] },
+          // });
+          curEntry = await YamlTable.findByPk(subInt.values[0]);
 
           if (!curEntry) {
             subInt.update(startingState);
           } else {
-            const playerEntry = await PlayerTable.findOne({
-              where: { userId },
-            });
+            // const playerEntry = await PlayerTable.findOne({
+            //   where: { userId },
+            // });
+            const playerEntry = await PlayerTable.findByPk(userId);
             (buttonRow.components[1] as MessageButton).disabled =
               playerEntry?.defaultCode === curEntry.code;
             subInt.update({
@@ -872,9 +875,10 @@ export class Archipelabot {
               )
             );
             // Create player entry if it doesn't exist
-            (await PlayerTable.findOne({
-              where: { userId: receivingUser.id },
-            })) ??
+            // (await PlayerTable.findOne({
+            //   where: { userId: receivingUser.id },
+            // })) ??
+            (await PlayerTable.findByPk(receivingUser.id)) ??
               (await PlayerTable.create({
                 userId: receivingUser.id,
                 defaultCode: null,
@@ -1038,9 +1042,10 @@ export class Archipelabot {
               const code = interaction.options.get("code", false);
               if (code && typeof code.value === "string") {
                 const codeUpper = code.value.toUpperCase();
-                const gameData = await GameTable.findOne({
-                  where: { code: codeUpper },
-                });
+                // const gameData = await GameTable.findOne({
+                //   where: { code: codeUpper },
+                // });
+                const gameData = await GameTable.findByPk(codeUpper);
                 if (gameData) {
                   if (interaction.guildId !== gameData.guildId) {
                     interaction.followUp(
@@ -1514,8 +1519,9 @@ export class Archipelabot {
                     )
                   );
                   await Promise.all([
-                    PlayerTable.findOne({ where: { userId } }).then(
-                      (i) =>
+                    // PlayerTable.findOne({ where: { userId } }).then(
+                      PlayerTable.findByPk(userId).then(
+                        (i) =>
                         i ?? PlayerTable.create({ userId, defaultCode: null })
                     ),
                     YamlTable.create({
@@ -1588,7 +1594,8 @@ export class Archipelabot {
       return;
     }
 
-    const gameData = await GameTable.findOne({ where: { code } });
+    // const gameData = await GameTable.findOne({ where: { code } });
+    const gameData = await GameTable.findByPk(code);
     if (!gameData) {
       channel.send(`Game ${code} not found.`);
       return;
