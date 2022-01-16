@@ -407,7 +407,7 @@ export class Archipelabot {
           (r) =>
             r.map((i) => {
               return {
-                label: i.description,
+                label: (i.description && i.description.length > 0) ? i.description : "No description provided",
                 description: i.games.join(", "),
                 value: i.code,
                 emoji: i.code === playerEntry?.defaultCode ? "⚔️" : undefined,
@@ -425,6 +425,7 @@ export class Archipelabot {
           : retval;
       };
 
+      /** The current working entry for this YAML manager. */
       let curEntry: YamlTable | null = null;
       const generateCurEntryEmbed = (calledUser?: string) => {
         if (!curEntry) return [];
@@ -699,6 +700,7 @@ export class Archipelabot {
               (yamlRow.components[0] as MessageSelectMenu).setOptions(
                 await updateYamlList()
               );
+              curEntry = null;
               subInt.update(
                 Object.assign<
                   InteractionUpdateOptions,
