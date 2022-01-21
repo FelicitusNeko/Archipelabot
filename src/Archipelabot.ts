@@ -536,9 +536,10 @@ export class Archipelabot {
         msgIn.reference?.messageId === msg.id &&
         msgIn.attachments.size > 0,
     });
-    console.info(
-      "Message collector for YAML manager for user %s is %s.",
-      userId,
+    console.debug(
+      "Message collector for YAML manager for user %s#%s is %s.",
+      interaction.user.username,
+      interaction.user.discriminator,
       msgCollector ? "active" : "broken"
     );
     msgCollector.on("collect", (msgIn) => {
@@ -630,9 +631,10 @@ export class Archipelabot {
     msgCollector.on("end", (_collected, reason) => {
       if (reason === "time")
         msg.edit({ content: "Timed out.", embeds: [], components: [] });
-      console.info(
-        "Message collector for YAML manager for user %s has been closed.",
-        userId
+      console.debug(
+        "Message collector for YAML manager for user %s#%s has been closed.",
+        interaction.user.username,
+        interaction.user.discriminator
       );
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
@@ -1143,7 +1145,7 @@ export class Archipelabot {
       await mkdirIfNotExist(outputPath);
 
       //const yamlPath = pathJoin(AP_PATH, "Players", code);
-      const yamlPath = pathJoin(outputPath, 'yamls');
+      const yamlPath = pathJoin(outputPath, "yamls");
       await mkdirIfNotExist(yamlPath);
       await readdir(yamlPath, { withFileTypes: true }).then((files) =>
         files
@@ -1160,7 +1162,7 @@ export class Archipelabot {
         playerYamlList.map((i) =>
           copyFile(
             //`./yamls/${i.userId}/${i.filename}.yaml`,
-            pathJoin('yamls', i.userId, `${i.filename}.yaml`),
+            pathJoin("yamls", i.userId, `${i.filename}.yaml`),
             pathJoin(yamlPath, `${i.filename}.yaml`)
           )
         )
