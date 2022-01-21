@@ -310,26 +310,6 @@ export class Archipelabot {
         ],
         run: this.cmdAPGame,
       },
-      // {
-      //   name: "test",
-      //   description: "Testing commands",
-      //   type: "CHAT_INPUT",
-      //   options: [
-      //     {
-      //       type: ApplicationCommandOptionTypes.STRING,
-      //       name: "run",
-      //       description: "What test to run.",
-      //       choices: [
-      //         { name: "Send file", value: "sendfile" },
-      //         { name: "ZIP", value: "zip" },
-      //         { name: "Port detection", value: "port" },
-      //         { name: "Long embeds/spoiler parsing", value: "spoiler" },
-      //       ],
-      //       required: true,
-      //     },
-      //   ],
-      //   run: this.cmdTest,
-      // },
       {
         name: "admin",
         description: "Administrative functions (must be a bot admin to use)",
@@ -355,6 +335,38 @@ export class Archipelabot {
         ],
         run: this.cmdAdmin,
       },
+      {
+        name: "hello",
+        description:
+          'Replies "hello". Basically just to make sure the bot is running.',
+        type: "CHAT_INPUT",
+        run: async (interaction) => {
+          interaction.followUp({
+            content: "Hello! I'm awake.",
+            ephemeral: true,
+          });
+        },
+      },
+      // {
+      //   name: "test",
+      //   description: "Testing commands",
+      //   type: "CHAT_INPUT",
+      //   options: [
+      //     {
+      //       type: ApplicationCommandOptionTypes.STRING,
+      //       name: "run",
+      //       description: "What test to run.",
+      //       choices: [
+      //         { name: "Send file", value: "sendfile" },
+      //         { name: "ZIP", value: "zip" },
+      //         { name: "Port detection", value: "port" },
+      //         { name: "Long embeds/spoiler parsing", value: "spoiler" },
+      //       ],
+      //       required: true,
+      //     },
+      //   ],
+      //   run: this.cmdTest,
+      // },
     ];
 
     this.client.once("ready", () => {
@@ -525,8 +537,9 @@ export class Archipelabot {
         msgIn.attachments.size > 0,
     });
     console.info(
-      'Message collector for YAML manager for user %s is %s.',
-      userId, msgCollector ? "active" : "broken"
+      "Message collector for YAML manager for user %s is %s.",
+      userId,
+      msgCollector ? "active" : "broken"
     );
     msgCollector.on("collect", (msgIn) => {
       ResetTimeout();
@@ -617,7 +630,10 @@ export class Archipelabot {
     msgCollector.on("end", (_collected, reason) => {
       if (reason === "time")
         msg.edit({ content: "Timed out.", embeds: [], components: [] });
-      console.info('Message collector for YAML manager for user %s has been closed.', userId);
+      console.info(
+        "Message collector for YAML manager for user %s has been closed.",
+        userId
+      );
       //else _msg.edit(`Check debug output. Reason: ${reason}`)
     });
 
@@ -1122,8 +1138,12 @@ export class Archipelabot {
         return;
       }
 
-      await mkdirIfNotExist(pathJoin(AP_PATH, "Players"));
-      const yamlPath = pathJoin(AP_PATH, "Players", code);
+      //await mkdirIfNotExist(pathJoin(AP_PATH, "Players"));
+      const outputPath = pathJoin("./games", code);
+      await mkdirIfNotExist(outputPath);
+
+      //const yamlPath = pathJoin(AP_PATH, "Players", code);
+      const yamlPath = pathJoin(outputPath, 'yamls');
       await mkdirIfNotExist(yamlPath);
       await readdir(yamlPath, { withFileTypes: true }).then((files) =>
         files
@@ -1136,18 +1156,16 @@ export class Archipelabot {
         where: { code: { [SqlOp.in]: playerList.map((i) => i[1]) } },
       });
 
-      //const yamlPath = path.join
       await Promise.all(
         playerYamlList.map((i) =>
           copyFile(
-            `./yamls/${i.userId}/${i.filename}.yaml`,
+            //`./yamls/${i.userId}/${i.filename}.yaml`,
+            pathJoin('yamls', i.userId, `${i.filename}.yaml`),
             pathJoin(yamlPath, `${i.filename}.yaml`)
           )
         )
       );
 
-      const outputPath = pathJoin("./games", code);
-      await mkdirIfNotExist(outputPath);
       const outputFile = await new Promise<string>((f, r) => {
         const pyApGenerate = spawn(
           PYTHON_PATH,
@@ -1176,6 +1194,8 @@ export class Archipelabot {
           outData += data;
           if (data.toString().includes("press enter to install it"))
             pyApGenerate.stdin.write("\n");
+          else if (data.toString().includes("Press enter to close"))
+            pyApGenerate.stdin.write("\n");
           if (errTimeout) {
             clearTimeout(errTimeout);
             errTimeout = undefined;
@@ -1185,6 +1205,8 @@ export class Archipelabot {
           logerr.write(data);
           errData += data;
           if (data.toString().includes("press enter to install it"))
+            pyApGenerate.stdin.write("\n");
+          else if (data.toString().includes("Press enter to close"))
             pyApGenerate.stdin.write("\n");
           else {
             if (errTimeout) clearTimeout(errTimeout);
@@ -1208,11 +1230,8 @@ export class Archipelabot {
       }).catch((e) => {
         writeMsg({
           content: "An error occurred during game generation.",
-          embeds: [
-            new MessageEmbed({
-              title: "Generation error",
-              description: (e as Error).message,
-            }),
+          files: [
+            new MessageAttachment((e as Error).message, "Generation Error.txt"),
           ],
         });
         return undefined;
