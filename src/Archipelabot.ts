@@ -36,6 +36,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  rm as fsRm,
   unlink,
   writeFile,
 } from "fs/promises";
@@ -264,12 +265,17 @@ const generateLetterCode = (
 };
 
 export class Archipelabot {
+  /** The Discord API client interface. */
   private client: DiscordClient;
+  /** The list of commands accepted by the bot. */
   private cmds: Command[];
 
+  /** The list of games currently recruiting. */
   private recruit: Record<string, GameRecruitmentProcess> = {};
+  /** The list of games currently running. */
   private running: Record<string, RunningGame> = {};
 
+  /** The client's user ID, if it is available. If not, returns an empty string. */
   public get clientId(): string {
     return this.client && this.client.user ? this.client.user.id : "";
   }
@@ -1837,7 +1843,7 @@ export class Archipelabot {
           }
 
           // finally, clear any invalid defaults
-          await PlayerTable.update(
+          const [defaultsAffected] = await PlayerTable.update(
             { defaultCode: null },
             {
               where: {
@@ -1851,12 +1857,50 @@ export class Archipelabot {
           );
 
           interaction.followUp(
-            `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s).`
+            `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s), and reset ${defaultsAffected} defaults.`
           );
         }
         break;
       case "purgegame":
-        interaction.followUp("Not implemented yet.");
+        {
+          const oldGames = (
+            await GameTable.findAll({
+              attributes: ["code", "updatedAt"],
+              where: { active: false },
+            })
+          )
+            .filter(
+              // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
+              (i) => i.updatedAt.getTime() < Date.now() - 1_209_600_000
+            )
+            .map((i) => i.code);
+
+          const orphanedGames = await (async () => {
+            const gameCodeList = (
+              await GameTable.findAll({ attributes: ["code"] })
+            ).map((i) => i.code);
+            return (
+              await readdir("games", { withFileTypes: true })
+            )
+              .filter((i) => i.isDirectory())
+              .map((i) => i.name)
+              .filter(i => !gameCodeList.includes(i));
+          })();
+
+          const gamesToPurge = new Set([...oldGames, ...orphanedGames]);
+
+          for (const code of gamesToPurge) {
+            await fsRm(pathJoin("games", code), {
+              recursive: true,
+              force: true,
+            });
+          }
+
+          await GameTable.destroy({
+            where: { code: { [SqlOp.in]: [...gamesToPurge] } },
+          });
+          interaction.followUp(`${gamesToPurge.size} game(s) purged.`);
+        }
         break;
       case "giveyaml":
         {
