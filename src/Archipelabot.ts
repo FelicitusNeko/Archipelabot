@@ -73,7 +73,6 @@ interface RunningGame {
   guildId: string;
   channelId: string;
   startingUser: string;
-  //playingUsers: string[];
   state: GameState;
 }
 
@@ -425,7 +424,6 @@ export class Archipelabot {
 
     const updateYamlList = async () => {
       const playerEntry =
-        //(await PlayerTable.findOne({ where: { userId } })) ??
         (await PlayerTable.findByPk(userId)) ??
         (await PlayerTable.create({ userId, defaultCode: null }));
       const retval = await YamlTable.findAll({ where: { userId } }).then((r) =>
@@ -658,17 +656,11 @@ export class Archipelabot {
           });
           return;
         }
-        // curEntry = await YamlTable.findOne({
-        //   where: { code: subInt.values[0] },
-        // });
         curEntry = await YamlTable.findByPk(subInt.values[0]);
 
         if (!curEntry) {
           subInt.update(startingState);
         } else {
-          // const playerEntry = await PlayerTable.findOne({
-          //   where: { userId },
-          // });
           const playerEntry = await PlayerTable.findByPk(userId);
           (buttonRow.components[1] as MessageButton).disabled =
             playerEntry?.defaultCode === curEntry.code;
@@ -792,7 +784,6 @@ export class Archipelabot {
       content: `${userMention(
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
-      //attachments: [yamlAttach],
       files: [{ attachment: Buffer.from(yamlData.data) }],
       components: [
         new MessageActionRow({
@@ -833,9 +824,6 @@ export class Archipelabot {
               )
             );
             // Create player entry if it doesn't exist
-            // (await PlayerTable.findOne({
-            //   where: { userId: receivingUser.id },
-            // })) ??
             (await PlayerTable.findByPk(receivingUser.id)) ??
               (await PlayerTable.create({
                 userId: receivingUser.id,
@@ -853,7 +841,6 @@ export class Archipelabot {
                 userId: receivingUser.id,
                 filename: `${msg.id}`,
                 description: yamlData.desc ?? "No description provided",
-                //playerName: JSON.stringify(yamlData.name ?? ["Who?"]),
                 playerName: yamlData.name ?? ["Who?"],
                 games: yamlData.games ?? ["A Link to the Past"],
               }),
@@ -919,7 +906,6 @@ export class Archipelabot {
                 interaction.followUp(
                   "There is already a game being organized on this server!"
                 );
-                //this.recruit[guildId].msg.reply("Here's where that lives.");
               } else {
                 const gameCode = generateLetterCode(
                   (await GameTable.findAll({ attributes: ["code"] })).map(
@@ -979,7 +965,7 @@ export class Archipelabot {
                 });
                 reactionCollector.on("dispose", (reaction) => {
                   // TODO: find out when this event fires (if it does)
-                  console.debug("Dispose:" /*, reaction*/);
+                  console.debug("Dispose:" , reaction);
                   if (reaction.emoji.name === "⚔️") {
                     newRecruit.msg.react("⚔️");
                     newRecruit.defaultUsers = [];
@@ -1000,9 +986,6 @@ export class Archipelabot {
               const code = interaction.options.get("code", false);
               if (code && typeof code.value === "string") {
                 const codeUpper = code.value.toUpperCase();
-                // const gameData = await GameTable.findOne({
-                //   where: { code: codeUpper },
-                // });
                 const gameData = await GameTable.findByPk(codeUpper);
                 if (gameData) {
                   if (interaction.guildId !== gameData.guildId) {
@@ -1469,7 +1452,6 @@ export class Archipelabot {
               .then(async (i) => {
                 const validate = quickValidateYaml(i[0]);
                 if (!validate.error) {
-                  //const filename = `./yamls/${userId}/${msg.id}.yaml`;
                   const filepath = pathJoin("./yamls", userId);
                   const filename = pathJoin(filepath, msg.id + ".yaml");
                   await mkdirIfNotExist(filepath);
@@ -1480,7 +1462,6 @@ export class Archipelabot {
                     )
                   );
                   await Promise.all([
-                    // PlayerTable.findOne({ where: { userId } }).then(
                     PlayerTable.findByPk(userId).then(
                       (i) =>
                         i ?? PlayerTable.create({ userId, defaultCode: null })
@@ -1488,7 +1469,6 @@ export class Archipelabot {
                     YamlTable.create({
                       code,
                       userId,
-                      //playerName: JSON.stringify(validate.name ?? ["Who?"]),
                       playerName: validate.name ?? ["Who?"],
                       description: validate.desc ?? "No description given",
                       games: validate.games ?? ["A Link to the Past"],
@@ -1555,7 +1535,6 @@ export class Archipelabot {
       return;
     }
 
-    // const gameData = await GameTable.findOne({ where: { code } });
     const gameData = await GameTable.findByPk(code);
     if (!gameData) {
       channel.send(`Game ${code} not found.`);
