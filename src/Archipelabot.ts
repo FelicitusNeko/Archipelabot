@@ -1863,32 +1863,27 @@ export class Archipelabot {
         break;
       case "purgegame":
         {
-          const oldGames = (
-            await GameTable.findAll({
-              attributes: ["code", "updatedAt"],
-              where: { active: false },
-            })
-          )
-            .filter(
-              // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
-              (i) => i.updatedAt.getTime() < Date.now() - 1_209_600_000
-            )
-            .map((i) => i.code);
+          // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
+          /** A Unix millisecond timestamp corresponding to two weeks before the current time. */
+          const twoWeeksAgo = Date.now() - 1_209_600_000;
+          const gamesToPurge = await Promise.all([
+            GameTable.findAll({
+              attributes: ["code", "updatedAt", "active"],
+            }),
+            readdir("games", { withFileTypes: true }),
+          ]).then(([gameRows, gameDirs]) => {
+            const gameCodes = gameRows.map((i) => i.code);
+            return new Set([
+              ...gameRows
+                .filter((i) => i.active && i.updatedAt.getTime() < twoWeeksAgo)
+                .map((i) => i.code),
+              ...gameDirs
+                .filter((i) => i.isDirectory() && !gameCodes.includes(i.name))
+                .map((i) => i.name)
+            ]);
+          });
 
-          const orphanedGames = await (async () => {
-            const gameCodeList = (
-              await GameTable.findAll({ attributes: ["code"] })
-            ).map((i) => i.code);
-            return (
-              await readdir("games", { withFileTypes: true })
-            )
-              .filter((i) => i.isDirectory())
-              .map((i) => i.name)
-              .filter(i => !gameCodeList.includes(i));
-          })();
-
-          const gamesToPurge = new Set([...oldGames, ...orphanedGames]);
-
+          console.debug("Purging:", gamesToPurge);
           for (const code of gamesToPurge) {
             await fsRm(pathJoin("games", code), {
               recursive: true,
