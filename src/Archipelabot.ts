@@ -37,16 +37,13 @@ import {
 } from "./core";
 import { GameManager } from "./GameManager";
 
+const { ENABLE_TEST } = process.env;
+
 export class Archipelabot {
   /** The Discord API client interface. */
   private _client: DiscordClient;
   /** The list of commands accepted by the bot. */
   private _cmds: Command[];
-
-  // /** The list of games currently recruiting. */
-  // private recruit: Record<string, GameRecruitmentProcess> = {};
-  // /** The list of games currently running. */
-  // private running: Record<string, RunningGame> = {};
 
   /** The list of games currently being used. */
   private _games: GameManager[] = [];
@@ -129,27 +126,29 @@ export class Archipelabot {
           });
         },
       },
-      // {
-      //   name: "test",
-      //   description: "Testing commands",
-      //   type: "CHAT_INPUT",
-      //   options: [
-      //     {
-      //       type: ApplicationCommandOptionTypes.STRING,
-      //       name: "run",
-      //       description: "What test to run.",
-      //       choices: [
-      //         { name: "Send file", value: "sendfile" },
-      //         { name: "ZIP", value: "zip" },
-      //         { name: "Port detection", value: "port" },
-      //         { name: "Long embeds/spoiler parsing", value: "spoiler" },
-      //       ],
-      //       required: true,
-      //     },
-      //   ],
-      //   run: this.cmdTest,
-      // },
     ];
+
+    if (ENABLE_TEST)
+      this._cmds.push({
+        name: "test",
+        description: "Testing commands",
+        type: "CHAT_INPUT",
+        options: [
+          {
+            type: ApplicationCommandOptionTypes.STRING,
+            name: "run",
+            description: "What test to run.",
+            choices: [
+              { name: "Send file", value: "sendfile" },
+              { name: "ZIP", value: "zip" },
+              { name: "Port detection", value: "port" },
+              { name: "Long embeds/spoiler parsing", value: "spoiler" },
+            ],
+            required: true,
+          },
+        ],
+        run: this.cmdTest,
+      });
 
     this._client.once("ready", () => {
       console.log(`${client.user?.username} is online`);
@@ -663,7 +662,11 @@ export class Archipelabot {
   }
 
   cmdAPGame = async (interaction: BaseCommandInteraction) => {
-    if (!interaction.guild || !interaction.channel || !interaction.channel.isText()) {
+    if (
+      !interaction.guild ||
+      !interaction.channel ||
+      !interaction.channel.isText()
+    ) {
       interaction.followUp({
         ephemeral: true,
         content:
@@ -674,121 +677,111 @@ export class Archipelabot {
         guildId,
         user: { id: hostId },
       } = interaction;
-      try {
-        switch (interaction.options.get("subcommand", true).value as string) {
-          case "start":
-            {
-              const gameHere = this._games.find((i) => i.guildId === guildId);
-              if (gameHere) {
-                interaction.followUp(
-                  "There is already a game being organized on this server!"
-                );
-              } else {
-                const game = await GameManager.NewGame(this._client);
-                this._games.push(game);
-                await game.RecruitGame(interaction);
-                console.debug(game);
-              }
+      switch (interaction.options.get("subcommand", true).value as string) {
+        case "start":
+          {
+            const gameHere = this._games.find((i) => i.guildId === guildId);
+            if (gameHere) {
+              interaction.followUp(
+                "There is already a game being organized on this server!"
+              );
+            } else {
+              const game = await GameManager.NewGame(this._client);
+              this._games.push(game);
+              await game.RecruitGame(interaction);
+              console.debug(game);
             }
-            break;
+          }
+          break;
 
-          case "launch":
-            {
-              const code = interaction.options.get("code", false);
-              if (code && typeof code.value === "string") {
-                const codeUpper = code.value.toUpperCase();
-                //const gameData = await GameTable.findByPk(codeUpper);
-                const creationData = await GameManager.GetCreationData(
-                  codeUpper
-                );
+        case "launch":
+          {
+            const code = interaction.options.get("code", false);
+            if (code && typeof code.value === "string") {
+              const codeUpper = code.value.toUpperCase();
+              //const gameData = await GameTable.findByPk(codeUpper);
+              const creationData = await GameManager.GetCreationData(codeUpper);
 
-                if (creationData) {
-                  if (interaction.guildId !== creationData.guild) {
-                    interaction.followUp(
-                      `Game ${codeUpper} was not created on this server.`
-                    );
-                  } else if (interaction.user.id !== creationData.host) {
-                    interaction.followUp(
-                      `This is not your game! Game ${codeUpper} was created by ${userMention(
-                        creationData.host
-                      )}.`
-                    );
-                  } else {
-                    interaction.followUp(
-                      `Attempting to launch game ${codeUpper}.`
-                    );
-                    const game = await GameManager.fromCode(
-                      this._client,
-                      codeUpper
-                    );
-                    this._games.push(game);
-                    game.RunGame(interaction.channelId);
-                  }
+              if (creationData) {
+                if (interaction.guildId !== creationData.guild) {
+                  interaction.followUp(
+                    `Game ${codeUpper} was not created on this server.`
+                  );
+                } else if (interaction.user.id !== creationData.host) {
+                  interaction.followUp(
+                    `This is not your game! Game ${codeUpper} was created by ${userMention(
+                      creationData.host
+                    )}.`
+                  );
                 } else {
-                  interaction.followUp(`Game code ${codeUpper} not found.`);
+                  interaction.followUp(
+                    `Attempting to launch game ${codeUpper}.`
+                  );
+                  const game = await GameManager.fromCode(
+                    this._client,
+                    codeUpper
+                  );
+                  this._games.push(game);
+                  game.RunGame(interaction.channelId);
                 }
               } else {
-                const game = this._games.find(
-                  (i) =>
-                    i.guildId === guildId && i.state === GameState.Assembling
-                );
-                if (!game) {
-                  interaction.followUp({
-                    ephemeral: true,
-                    content: "No game is currently being organized!",
-                  });
-                } else if (game.hostId !== hostId) {
-                  interaction.followUp({
-                    ephemeral: true,
-                    content: "You're not the person who launched this event!",
-                  });
-                } else if (game.playerCount === 0) {
-                  interaction.followUp({
-                    ephemeral: true,
-                    content:
-                      "Nobody has signed up for this game yet! Either wait for signups or cancel.",
-                  });
-                } else
-                  game.CreateGame(interaction).then(() => {
-                    this._games = this._games.filter((i) => i !== game);
-                  });
+                interaction.followUp(`Game code ${codeUpper} not found.`);
               }
-            }
-            break;
-
-          case "cancel":
-            {
-              console.debug(this._games.map(i => i.guildId))
+            } else {
               const game = this._games.find(
                 (i) => i.guildId === guildId && i.state === GameState.Assembling
               );
-              if (!game)
+              if (!game) {
                 interaction.followUp({
                   ephemeral: true,
                   content: "No game is currently being organized!",
                 });
-              else if (game.CancelGame(interaction))
-                this._games = this._games.filter((i) => i !== game);
+              } else if (game.hostId !== hostId) {
+                interaction.followUp({
+                  ephemeral: true,
+                  content: "You're not the person who launched this event!",
+                });
+              } else if (game.playerCount === 0) {
+                interaction.followUp({
+                  ephemeral: true,
+                  content:
+                    "Nobody has signed up for this game yet! Either wait for signups or cancel.",
+                });
+              } else
+                game.CreateGame(interaction).then(() => {
+                  this._games = this._games.filter((i) => i !== game);
+                });
             }
-            break;
+          }
+          break;
 
-          default:
-            interaction.followUp({
-              ephemeral: true,
-              content:
-                "I don't recognize that subcommand. (valid options: start, launch, cancel)",
-            });
-            console.warn(
-              "Unknown subcommand",
-              interaction.options.get("subcommand", true).value
+        case "cancel":
+          {
+            console.debug(this._games.map((i) => i.guildId));
+            const game = this._games.find(
+              (i) => i.guildId === guildId && i.state === GameState.Assembling
             );
-            break;
-        }
-      } catch (e) {
-        interaction.followUp(
-          "An error occured. Check debug log. (Maybe you forgot to specify a subcommand?)"
-        );
-        console.error(e);
+            if (!game)
+              interaction.followUp({
+                ephemeral: true,
+                content: "No game is currently being organized!",
+              });
+            else if (game.CancelGame(interaction))
+              this._games = this._games.filter((i) => i !== game);
+          }
+          break;
+
+        default:
+          interaction.followUp({
+            ephemeral: true,
+            content:
+              "I don't recognize that subcommand. (valid options: start, launch, cancel)",
+          });
+          console.warn(
+            "Unknown subcommand",
+            interaction.options.get("subcommand", true).value
+          );
+          break;
       }
     }
   };
