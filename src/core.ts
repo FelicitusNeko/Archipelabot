@@ -52,6 +52,8 @@ export interface YamlData {
   name?: string[];
   /** The description for this YAML, if any. */
   desc?: string;
+  /** The message ID where the YAML was received. */
+  msgId?: string;
   /** The stringified data for this YAML. */
   data: string;
 }

@@ -12,7 +12,6 @@ import {
   MessageEditOptions,
   MessageEmbed,
   MessageSelectMenu,
-  MessageSelectOptionData,
   ReactionCollector,
 } from "discord.js";
 import { createWriteStream } from "fs";
@@ -28,6 +27,7 @@ import {
   QuickValidateYaml,
 } from "./core";
 import { GameTable, PlayerTable, YamlTable } from "./Sequelize";
+import { YamlManager } from "./YamlManager";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
@@ -296,8 +296,9 @@ export class GameManager {
   ): Promise<[string, string | null]> {
     const user = this._client.users.cache.get(userId);
     if (!user) return [userId, null];
+    const yamlMgr = new YamlManager(this._client, userId);
 
-    const yamls = await YamlTable.findAll({ where: { userId } });
+    //const yamls = await YamlTable.findAll({ where: { userId } });
     /** The time at which the YAML request will time out, in Unix timestamp format. */
     const timeout = Math.floor(Date.now() / 1000) + 30 * 60;
 
@@ -313,16 +314,7 @@ export class GameManager {
             new MessageSelectMenu({
               customId: "selectYaml",
               placeholder: "Select a YAML",
-              options:
-                yamls.length > 0
-                  ? yamls.map((i) => {
-                      return {
-                        label: i.description,
-                        description: i.games.join(", "),
-                        value: i.code,
-                      } as MessageSelectOptionData;
-                    })
-                  : [{ label: "No YAMLs", value: "noyaml" }],
+              options: await yamlMgr.GetYamlOptions(),
             }),
           ],
         }),
@@ -506,10 +498,9 @@ export class GameManager {
     //     .forEach((i) => unlink(pathJoin(yamlPath, i.name)))
     // );
 
-    const playerYamlList = await YamlTable.findAll({
-      attributes: ["userId", "filename", "playerName"],
-      where: { code: { [SqlOp.in]: playerList.map((i) => i[1]) } },
-    });
+    const playerYamlList = await YamlManager.GetYamlsByCode(
+      ...playerList.map((i) => i[1])
+    );
 
     await Promise.all(
       playerYamlList.map((i) =>

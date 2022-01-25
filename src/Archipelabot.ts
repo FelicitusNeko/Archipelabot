@@ -5,22 +5,16 @@ import {
   User as DiscordUser,
   BaseCommandInteraction,
   MessageActionRow,
-  MessageSelectMenu,
   MessageButton,
-  MessageSelectOptionData,
   MessageEmbed,
-  InteractionUpdateOptions,
-  InteractionReplyOptions,
   MessageAttachment,
 } from "discord.js";
 import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
 import { userMention } from "@discordjs/builders";
-import { Op as SqlOp } from "sequelize/dist";
 import * as AdmZip from "adm-zip";
 
-import { join as pathJoin, sep as pathSep, basename } from "path";
-import { readdirSync } from "fs";
-import { readdir, readFile, unlink, writeFile } from "fs/promises";
+import { basename, join as pathJoin } from "path";
+import { readdir, readFile, writeFile } from "fs/promises";
 
 import { PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
@@ -36,6 +30,8 @@ import {
   YamlData,
 } from "./core";
 import { GameManager } from "./GameManager";
+import { YamlManager } from "./YamlManager";
+import { Dirent } from "fs";
 
 const { ENABLE_TEST } = process.env;
 
@@ -143,6 +139,7 @@ export class Archipelabot {
               { name: "ZIP", value: "zip" },
               { name: "Port detection", value: "port" },
               { name: "Long embeds/spoiler parsing", value: "spoiler" },
+              { name: "Rebuild YAML table", value: "rebuildyaml" },
             ],
             required: true,
           },
@@ -198,354 +195,9 @@ export class Archipelabot {
       user: { id: userId },
     } = interaction;
 
-    const updateYamlList = async () => {
-      const playerEntry =
-        (await PlayerTable.findByPk(userId)) ??
-        (await PlayerTable.create({ userId, defaultCode: null }));
-      const retval = await YamlTable.findAll({ where: { userId } }).then((r) =>
-        r.map((i) => {
-          return {
-            label:
-              i.description && i.description.length > 0
-                ? i.description
-                : "No description provided",
-            description: i.games.join(", "),
-            value: i.code,
-            emoji: i.code === playerEntry?.defaultCode ? "⚔️" : undefined,
-          } as MessageSelectOptionData;
-        })
-      );
-
-      return retval.length === 0
-        ? [
-            {
-              label: "No YAMLs",
-              value: "noyaml",
-            },
-          ]
-        : retval;
-    };
-
-    /** The current working entry for this YAML manager. */
-    let curEntry: YamlTable | null = null;
-    const generateCurEntryEmbed = (calledUser?: string) => {
-      if (!curEntry) return [];
-      else
-        return [
-          new MessageEmbed({
-            title: curEntry.description ?? "Unknown",
-            footer: userMention(calledUser ?? curEntry.userId),
-            fields: [
-              {
-                name: "Games",
-                value: curEntry.games.join(", ") ?? "Unknown",
-                inline: true,
-              },
-              {
-                name: "User",
-                value: userMention(curEntry.userId),
-                inline: true,
-              },
-            ],
-          }),
-        ];
-    };
-
-    /** A component row containing a YAML dropdown box. */
-    const yamlRow = new MessageActionRow({
-      components: [
-        new MessageSelectMenu({
-          customId: "yaml",
-          placeholder: "Select a YAML",
-          options: await updateYamlList(),
-        }),
-      ],
-    });
-    /** A component row containing buttons to manage individual YAMLs. */
-    const buttonRow = new MessageActionRow({
-      components: [
-        new MessageButton({
-          customId: "backToYamlList",
-          label: "Back",
-          style: "SECONDARY",
-        }),
-        new MessageButton({
-          customId: "setDefaultYaml",
-          label: "Set Default",
-          style: "PRIMARY",
-        }),
-        new MessageButton({
-          customId: "deleteYaml",
-          label: "Delete",
-          style: "DANGER",
-        }),
-      ],
-    });
-    /** The default starting state of the YAML manager. */
-    const startingState: InteractionUpdateOptions = {
-      content:
-        "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
-      embeds: [],
-      components: [yamlRow],
-    };
-
-    /** The message that will be controlled to represent the YAML management interface. */
-    const msg = (await (async () => {
-      if (interaction.channel)
-        return interaction.followUp(
-          Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
-            { ephemeral: true },
-            startingState
-          )
-        );
-      else {
-        await interaction.followUp("Okay, YAML manager. One sec...");
-        return interaction.user.send(
-          Object.assign<InteractionReplyOptions, InteractionUpdateOptions>(
-            { ephemeral: true },
-            startingState
-          )
-        );
-      }
-    })()) as DiscordMessage;
-
-    /** The message collector that will gather YAMLs sent in. */
-    const msgCollector = msg.channel.createMessageCollector({
-      filter: (msgIn) =>
-        msgIn.type === "REPLY" &&
-        msgIn.reference?.messageId === msg.id &&
-        msgIn.attachments.size > 0,
-    });
-    console.debug(
-      "Message collector for YAML manager for user %s#%s is %s.",
-      interaction.user.username,
-      interaction.user.discriminator,
-      msgCollector ? "active" : "broken"
-    );
-    msgCollector.on("collect", (msgIn) => {
-      ResetTimeout();
-      const yamls = msgIn.attachments.filter(
-        (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
-      );
-      if (yamls.size === 0) msg.edit("That wasn't a YAML!");
-      else {
-        Promise.all(yamls.map((i) => GetFile(i.url)))
-          .then(async (i) => {
-            const userDir = pathJoin("./yamls", userId);
-            if (curEntry) {
-              // Edit an existing YAML
-              const validate = QuickValidateYaml(i[0]);
-              if (!validate.error) {
-                await writeFile(pathJoin(userDir, `${msgIn.id}-u.yaml`), i[0]);
-                const updateInfo = {
-                  filename: `${msgIn.id}-u`,
-                  description: validate.desc ?? "No description provided",
-                  games: validate.games ?? ["A Link to the Past"],
-                  playerName: validate.name,
-                };
-
-                await YamlTable.update(updateInfo, {
-                  where: { code: curEntry.code },
-                });
-
-                unlink(`${userDir}/${curEntry.filename}.yaml`);
-                curEntry = Object.assign<YamlTable, Partial<YamlTable>>(
-                  curEntry,
-                  updateInfo
-                );
-                msg.edit({
-                  content: `Thanks! YAML has been updated.`,
-                  embeds: generateCurEntryEmbed(userId),
-                });
-              } else {
-                msg.edit(
-                  "That doesn't look like a valid YAML. The entry was not updated."
-                );
-              }
-            } else {
-              // Add a new YAML
-              /** The list of currently used codes in the YAML manager. */
-              const usedCodes = (
-                await YamlTable.findAll({ attributes: ["code"] })
-              ).map((i) => i.code);
-              let addedCount = 0;
-
-              MkdirIfNotExist(userDir);
-              for (const x in i) {
-                const validate = QuickValidateYaml(i[x]);
-                if (!validate.error) {
-                  const code = GenerateLetterCode(usedCodes);
-                  await Promise.all([
-                    writeFile(`${userDir}/${msgIn.id}-${x}.yaml`, i[x]),
-                    YamlTable.create({
-                      code,
-                      userId,
-                      filename: `${msgIn.id}-${x}`,
-                      description: validate.desc ?? "No description provided",
-                      playerName: validate.name ?? ["Who?"],
-                      games: validate.games ?? ["A Link to the Past"],
-                    }),
-                  ]);
-                  usedCodes.push(code);
-                  addedCount++;
-                }
-              }
-              (yamlRow.components[0] as MessageSelectMenu).setOptions(
-                await updateYamlList()
-              );
-              msg.edit({
-                content: `Thanks! Added ${addedCount} valid YAML(s) of ${msgIn.attachments.size} file(s) submitted.`,
-                components: [yamlRow],
-              });
-            }
-
-            if (msgIn.deletable) msgIn.delete();
-            else msgIn.react("👀");
-          })
-          .catch((e) => {
-            msg.edit("An error occurred. Check debug log.");
-            console.error(e);
-          });
-      }
-    });
-    msgCollector.on("end", (_collected, reason) => {
-      if (reason === "time")
-        msg.edit({ content: "Timed out.", embeds: [], components: [] });
-      console.debug(
-        "Message collector for YAML manager for user %s#%s has been closed.",
-        interaction.user.username,
-        interaction.user.discriminator
-      );
-      //else _msg.edit(`Check debug output. Reason: ${reason}`)
-    });
-
-    const subInteractionHandler = async (subInt: DiscordInteraction) => {
-      if (!subInt.isSelectMenu() && !subInt.isButton()) return;
-      if (subInt.user.id !== userId) return;
-      if (subInt.message.id !== msg.id) return;
-
-      if (subInt.isSelectMenu()) {
-        if (subInt.values[0] === "noyaml") {
-          subInt.update({
-            content:
-              "There are no YAMLs currently associated to you. Please provide one by replying to this message with it attached.",
-          });
-          return;
-        }
-        curEntry = await YamlTable.findByPk(subInt.values[0]);
-
-        if (!curEntry) {
-          subInt.update(startingState);
-        } else {
-          const playerEntry = await PlayerTable.findByPk(userId);
-          (buttonRow.components[1] as MessageButton).disabled =
-            playerEntry?.defaultCode === curEntry.code;
-          subInt.update({
-            content:
-              "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
-            embeds: generateCurEntryEmbed(subInt.user.id),
-            components: [buttonRow],
-          });
-        }
-      } else if (subInt.isButton() && curEntry) {
-        switch (subInt.customId) {
-          case "backToYamlList":
-            subInt.update(startingState);
-            break;
-
-          case "setDefaultYaml":
-            await PlayerTable.update(
-              { defaultCode: curEntry.code },
-              {
-                where: { userId: curEntry.userId },
-              }
-            );
-
-            (buttonRow.components[1] as MessageButton).disabled = true;
-            subInt.update({
-              content: "Your default YAML has been changed to this one.",
-              components: [buttonRow],
-            });
-            (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await updateYamlList()
-            );
-            break;
-
-          case "deleteYaml":
-            subInt.update({
-              content: "Are you sure you wish to delete this YAML?",
-              components: [
-                new MessageActionRow({
-                  components: [
-                    new MessageButton({
-                      customId: "deleteYamlYes",
-                      label: "Yes",
-                      style: "DANGER",
-                    }),
-                    new MessageButton({
-                      customId: "deleteYamlNo",
-                      label: "No",
-                      style: "SECONDARY",
-                    }),
-                  ],
-                }),
-              ],
-            });
-            break;
-
-          case "deleteYamlYes":
-            await YamlTable.destroy({ where: { code: curEntry.code } });
-
-            PlayerTable.update(
-              { defaultCode: null },
-              { where: { defaultCode: curEntry.code } }
-            ),
-              unlink(`./yamls/${curEntry.userId}/${curEntry.filename}.yaml`);
-            (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await updateYamlList()
-            );
-            curEntry = null;
-            subInt.update(
-              Object.assign<InteractionUpdateOptions, InteractionUpdateOptions>(
-                startingState,
-                {
-                  content:
-                    "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
-                }
-              )
-            );
-            break;
-
-          case "deleteYamlNo":
-            subInt.update({
-              content:
-                "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
-              components: [buttonRow],
-            });
-            break;
-
-          default:
-            console.debug(subInt);
-            subInt.update({
-              content: `You clicked the ${subInt.customId} button!`,
-            });
-            break;
-        }
-      }
-    };
-
-    this._client.on("interactionCreate", subInteractionHandler);
-
-    let timeoutSignal: NodeJS.Timeout;
-    const Timeout = () => {
-      this._client.off("interactionCreate", subInteractionHandler);
-      msgCollector?.stop("time");
-    };
-    const ResetTimeout = (msec = 180000) => {
-      if (timeoutSignal) clearTimeout(timeoutSignal);
-      timeoutSignal = setTimeout(Timeout, msec);
-    };
-    ResetTimeout();
+    interaction.followUp("Okay, YAML manager. One sec...");
+    const manager = new YamlManager(this._client, userId);
+    manager.YamlManager();
   };
 
   async sendYamlForApproval(
@@ -786,78 +438,6 @@ export class Archipelabot {
     }
   };
 
-  cmdTest = async (interaction: BaseCommandInteraction) => {
-    switch (interaction.options.get("run", true).value as string) {
-      case "sendfile":
-        interaction.followUp({
-          content: "Here you go.",
-          files: [
-            {
-              attachment: await readFile(".yarnrc.yml"),
-              name: "test.yaml",
-            },
-          ],
-        });
-        break;
-      case "zip":
-        {
-          const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
-          interaction.followUp({
-            content: "Here you go.",
-            files: testZip
-              .getEntries()
-              .filter((i) => i.name.endsWith(".txt"))
-              .map((i) => {
-                return { attachment: i.getData(), name: i.name };
-              }),
-          });
-        }
-        break;
-      case "port":
-        interaction.followUp(
-          `Port 38281 is ${
-            (await isPortAvailable(38281)) ? "" : "not "
-          }available.`
-        );
-        break;
-      case "spoiler":
-        {
-          const bigSpoiler = (
-            await readFile("./test/AP_51012885067020691880_Spoiler.txt")
-          ).toString();
-          const playerListing: RegExpExecArray[] = [];
-          const playerListingRegex = /Player (\d+): (.+)[\r\n]+Game:\s+(.*)/gm;
-
-          for (
-            let match = playerListingRegex.exec(bigSpoiler);
-            match !== null;
-            match = playerListingRegex.exec(bigSpoiler)
-          )
-            playerListing.push(match);
-
-          interaction.followUp({
-            content: `Testing reading the spoiler file for players.`,
-            embeds:
-              playerListing.length > 0
-                ? [
-                    new MessageEmbed({
-                      title: "Who's Playing What",
-                      description: playerListing
-                        .map((i) => `${i[1]}: ${i[2]} → **${i[3]}**`)
-                        .join("\n"),
-                    }),
-                  ]
-                : [],
-          });
-        }
-        break;
-      default:
-        interaction.followUp(
-          "Unrecognized subcommand. That shouldn't happen..."
-        );
-    }
-  };
-
   cmdAdmin = async (interaction: BaseCommandInteraction) => {
     // TODO: Make sure user running command is an admin (hard-coded to me for now)
     if (interaction.user.id !== "475120074621976587") {
@@ -870,83 +450,7 @@ export class Archipelabot {
 
     switch (interaction.options.get("subcommand", true).value as string) {
       case "cleanyaml":
-        {
-          const [yamlDb, yamlFiles] = await Promise.all([
-            YamlTable.findAll().then((i) =>
-              i.map((ii) => pathJoin("yamls", ii.userId, `${ii.filename}.yaml`))
-            ),
-            readdir("yamls", { withFileTypes: true }).then((yamlDir) =>
-              yamlDir
-                .filter((yamlUserDir) => yamlUserDir.isDirectory)
-                .map((yamlUserDir) =>
-                  readdirSync(pathJoin("yamls", yamlUserDir.name))
-                    .filter((yamlFile) => yamlFile.endsWith(".yaml"))
-                    .map((yamlFile) =>
-                      pathJoin("yamls", yamlUserDir.name, yamlFile)
-                    )
-                )
-                .flat()
-            ),
-          ]);
-          /** The list of files that are in common between the database and the file store. */
-          const yamlCommon = yamlDb.filter((i) => yamlFiles.includes(i));
-
-          /** The number of database entries pruned. */
-          const dbPrune = yamlDb.length - yamlCommon.length,
-            /** The number of file entries pruned. */
-            filePrune = yamlFiles.length - yamlCommon.length;
-
-          if (filePrune > 0) {
-            // First, unlink orphaned files
-            for (const file of yamlFiles.filter((i) => !yamlCommon.includes(i)))
-              await unlink(file);
-          }
-
-          if (dbPrune > 0) {
-            // Then, deal with cleaning the database
-            /** The data to be used for cleaning the database. */
-            const dbCleanup: Record<string, string[]> = {};
-            // first here, parse the file list
-            for (const file of yamlDb
-              .filter((i) => !yamlCommon.includes(i))
-              .map((i) => i.split(pathSep).slice(1))) {
-              if (!dbCleanup[file[0]]) dbCleanup[file[0]] = [file[1]];
-              else dbCleanup[file[0]].push(file[1]);
-            }
-            console.debug(dbCleanup);
-            // then, remove any users that don't have any files (otherwise, they wouldn't get pruned at all)
-            await YamlTable.destroy({
-              where: { userId: { notIn: Object.keys(dbCleanup) } },
-            });
-            // finally, remove missing entries for users
-            for (const op of Object.entries(dbCleanup)) {
-              await YamlTable.destroy({
-                where: {
-                  userId: op[0],
-                  filename: { notIn: op[1].map((i) => basename(i, ".yaml")) },
-                },
-              });
-            }
-          }
-
-          // finally, clear any invalid defaults
-          const [defaultsAffected] = await PlayerTable.update(
-            { defaultCode: null },
-            {
-              where: {
-                defaultCode: {
-                  [SqlOp.notIn]: (
-                    await YamlTable.findAll({ attributes: ["code"] })
-                  ).map((i) => i.code),
-                },
-              },
-            }
-          );
-
-          interaction.followUp(
-            `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s), and reset ${defaultsAffected} defaults.`
-          );
-        }
+        YamlManager.CleanupYamls(interaction);
         break;
       case "purgegame":
         GameManager.CleanupGames(interaction);
@@ -1027,6 +531,131 @@ export class Archipelabot {
             });
             console.error(e);
           }
+        }
+        break;
+      default:
+        interaction.followUp(
+          "Unrecognized subcommand. That shouldn't happen..."
+        );
+    }
+  };
+
+  cmdTest = async (interaction: BaseCommandInteraction) => {
+    // TODO: Make sure user running command is a developer (hard-coded to me for now)
+    if (interaction.user.id !== "475120074621976587") {
+      interaction.followUp({
+        ephemeral: true,
+        content: "You're not a bot developer!",
+      });
+      return;
+    }
+    
+    switch (interaction.options.get("run", true).value as string) {
+      case "sendfile":
+        interaction.followUp({
+          content: "Here you go.",
+          files: [
+            {
+              attachment: await readFile(".yarnrc.yml"),
+              name: "test.yaml",
+            },
+          ],
+        });
+        break;
+      case "zip":
+        {
+          const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
+          interaction.followUp({
+            content: "Here you go.",
+            files: testZip
+              .getEntries()
+              .filter((i) => i.name.endsWith(".txt"))
+              .map((i) => {
+                return { attachment: i.getData(), name: i.name };
+              }),
+          });
+        }
+        break;
+      case "port":
+        interaction.followUp(
+          `Port 38281 is ${
+            (await isPortAvailable(38281)) ? "" : "not "
+          }available.`
+        );
+        break;
+      case "spoiler":
+        {
+          const bigSpoiler = (
+            await readFile("./test/AP_51012885067020691880_Spoiler.txt")
+          ).toString();
+          const playerListing: RegExpExecArray[] = [];
+          const playerListingRegex = /Player (\d+): (.+)[\r\n]+Game:\s+(.*)/gm;
+
+          for (
+            let match = playerListingRegex.exec(bigSpoiler);
+            match !== null;
+            match = playerListingRegex.exec(bigSpoiler)
+          )
+            playerListing.push(match);
+
+          interaction.followUp({
+            content: `Testing reading the spoiler file for players.`,
+            embeds:
+              playerListing.length > 0
+                ? [
+                    new MessageEmbed({
+                      title: "Who's Playing What",
+                      description: playerListing
+                        .map((i) => `${i[1]}: ${i[2]} → **${i[3]}**`)
+                        .join("\n"),
+                    }),
+                  ]
+                : [],
+          });
+        }
+        break;
+      case "rebuildyaml":
+        {
+          const codes: string[] = [];
+
+          await YamlTable.truncate();
+          await readdir("./yamls", { withFileTypes: true })
+            .then((dirList) =>
+              Promise.all(
+                dirList
+                  .filter((i) => i.isDirectory() && /\d+/.test(i.name))
+                  .map((i) =>
+                    readdir(pathJoin("yamls", i.name), {
+                      withFileTypes: true,
+                    }).then((files) => [i.name, files] as [string, Dirent[]])
+                  )
+              )
+            )
+            .then(async (fileList) => {
+              for (const [userId, files] of fileList) {
+                for (const file of files.filter(i => i.name.endsWith('.yaml'))) {
+                  const validate = await readFile(
+                    pathJoin("yamls", userId, file.name)
+                  ).then((data) => QuickValidateYaml(data.toString()));
+                  if (!validate.error) {
+                    const code = GenerateLetterCode(codes);
+                    await YamlTable.create({
+                      code,
+                      userId,
+                      playerName: validate.name ?? ['Who?'],
+                      description: validate.desc ?? 'No description',
+                      games: validate.games ?? ['A Link to the Past'],
+                      filename: basename(file.name, '.yaml')
+                    })
+                    codes.push(code);
+                  }
+                }
+              }
+            });
+
+          await PlayerTable.update({defaultCode: null}, {where: {}});
+
+          interaction.followUp(`YAML table rebuilt with ${codes.length} YAMLs. All defaults reset.`);
         }
         break;
       default:
