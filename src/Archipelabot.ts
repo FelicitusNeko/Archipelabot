@@ -86,6 +86,23 @@ export class Archipelabot {
         run: this.cmdAPGame,
       },
       {
+        name: "aptestgame",
+        description: "Start Archipelago test games (use /apgame to manage)",
+        type: "CHAT_INPUT",
+        options: [
+          {
+            type: ApplicationCommandOptionTypes.STRING,
+            name: "subcommand",
+            description: "What game command to run.",
+            choices: [
+              { name: "Start", value: "start" },
+            ],
+            required: true,
+          },
+        ],
+        run: (i) => this.cmdAPGame(i, true),
+      },
+      {
         name: "admin",
         description: "Administrative functions (must be a bot admin to use)",
         type: "CHAT_INPUT",
@@ -313,8 +330,14 @@ export class Archipelabot {
     this._client.on("interactionCreate", subInteractionHandler);
   }
 
-  cmdAPGame = async (interaction: BaseCommandInteraction) => {
-    if (
+  cmdAPGame = async (interaction: BaseCommandInteraction, isTestGame = false) => {
+    if (isTestGame && interaction.user.id !== "475120074621976587") {
+      interaction.followUp({
+        ephemeral: true,
+        content: "You're not a bot admin!",
+      });
+    }
+    else if (
       !interaction.guild ||
       !interaction.channel ||
       !interaction.channel.isText()
@@ -338,7 +361,7 @@ export class Archipelabot {
                 "There is already a game being organized on this server!"
               );
             } else {
-              const game = await GameManager.NewGame(this._client);
+              const game = await GameManager.NewGame(this._client, isTestGame);
               this._games.push(game);
               await game.RecruitGame(interaction);
               console.debug(game);
