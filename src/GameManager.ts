@@ -23,6 +23,7 @@ import {
   GenerateLetterCode,
   GetFile,
   isPortAvailable,
+  isTestGame,
   MkdirIfNotExist,
   QuickValidateYaml,
 } from "./core";
@@ -66,6 +67,8 @@ export class GameManager {
   private readonly _client: DiscordClient;
   /** The unique four-letter code for this game. */
   private readonly _code: string;
+  /** Whether this game is a test game. */
+  private readonly _testGame: boolean;
   /** The current state of the game. */
   private _state = GameState.Ready;
   /** The snowflake for the server this game is running on. */
@@ -130,9 +133,11 @@ export class GameManager {
   private constructor(
     client: DiscordClient,
     code: string,
+    testGame: boolean,
     existingGame?: GameTable
   ) {
     this._client = client;
+    this._testGame = testGame;
     this._code = code;
     if (existingGame) {
       this._guildId = existingGame.guildId;
@@ -150,11 +155,17 @@ export class GameManager {
     this._channelId = interaction.channelId;
     this._hostId = interaction.user.id;
     this._msg = (await interaction.followUp({
-      content: `${userMention(this._hostId)} is starting a game!`,
+      content: `${userMention(this._hostId)} is starting a ${
+        this._testGame ? "testing " : ""
+      }game!`,
       embeds: [
         new MessageEmbed({
-          title: "Multiworld Game Call",
+          title: this._testGame ? "Testing Game Call" : "Multiworld Game Call",
           description:
+            (this._testGame
+              ? "This is a testing game. Expect things to go wrong and/or implode. Game may end prematurely for any reason.\n" +
+                "Testing YAMLs are available for this game.\n\n"
+              : "") +
             "React ⚔️ to join into this game with your default YAML.\n" +
             "React 🛡️ to join with a different YAML.",
           footer: {
@@ -314,7 +325,7 @@ export class GameManager {
             new MessageSelectMenu({
               customId: "selectYaml",
               placeholder: "Select a YAML",
-              options: await yamlMgr.GetYamlOptions(),
+              options: await yamlMgr.GetYamlOptions(this._testGame),
             }),
           ],
         }),
@@ -355,11 +366,20 @@ export class GameManager {
                 "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
             });
           else {
-            retval = code;
-            subInt.update(
-              "Thanks! Your YAML has been received and will be used in your upcoming game."
-            );
-            msgCollector.stop("selectedyaml");
+            if (
+              !this._testGame &&
+              (await YamlManager.ContainsTestGames(code))
+            ) {
+              subInt.update(
+                "This YAML contains games in testing phase and cannot be used in this game. Please select a different YAML."
+              );
+            } else {
+              retval = code;
+              subInt.update(
+                "Thanks! Your YAML has been received and will be used in your upcoming game."
+              );
+              msgCollector.stop("selectedyaml");
+            }
           }
         }
       };
@@ -383,6 +403,22 @@ export class GameManager {
             .then(async (i) => {
               const validate = QuickValidateYaml(i[0]);
               if (!validate.error) {
+                if (msgIn.deletable) msgIn.delete();
+                else msgIn.react("👀");
+
+                if (!this._testGame && validate.games) {
+                  const hasAnyTestGames = validate.games.reduce(
+                    (r: boolean, i) => r || isTestGame(i),
+                    false
+                  );
+                  if (hasAnyTestGames) {
+                    msg.edit(
+                      "This YAML contains games in testing phase and cannot be used in this game. Please select a different YAML."
+                    );
+                    return;
+                  }
+                }
+
                 const filepath = pathJoin("./yamls", userId);
                 const filename = pathJoin(filepath, msg.id + ".yaml");
                 await MkdirIfNotExist(filepath);
@@ -415,9 +451,6 @@ export class GameManager {
                   content: `The supplied YAML was invalid: ${validate.error}. Please try again.`,
                 });
               }
-
-              if (msgIn.deletable) msgIn.delete();
-              else msgIn.react("👀");
             })
             .catch((e) => {
               msg.edit("An error occurred. Check debug log.");
@@ -818,15 +851,20 @@ export class GameManager {
 
   static async fromCode(client: DiscordClient, code: string) {
     return GameTable.findByPk(code).then((existingGame) => {
-      if (existingGame) return new GameManager(client, code, existingGame);
+      if (existingGame)
+        return new GameManager(client, code, false, existingGame);
       else throw new Error(`Game ${code} not found`);
     });
   }
 
-  static async NewGame(client: DiscordClient) {
+  static async NewGame(client: DiscordClient, isTestGame = false) {
     return GameTable.findAll({ attributes: ["code"] }).then(
       (codeList) =>
-        new GameManager(client, GenerateLetterCode(codeList.map((i) => i.code)))
+        new GameManager(
+          client,
+          GenerateLetterCode(codeList.map((i) => i.code)),
+          isTestGame
+        )
     );
   }
 
