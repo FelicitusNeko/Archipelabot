@@ -179,8 +179,12 @@ export class YamlManager {
             subInt.update(startingState);
           } else {
             const playerEntry = await PlayerTable.findByPk(this.userId);
+            const hasAnyTestGames = curEntry.games.reduce(
+              (r: boolean, i) => r || isTestGame(i),
+              false
+            );
             (buttonRow.components[1] as MessageButton).disabled =
-              playerEntry?.defaultCode === curEntry.code;
+              hasAnyTestGames || playerEntry?.defaultCode === curEntry.code;
             subInt.update({
               content:
                 "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
@@ -196,7 +200,17 @@ export class YamlManager {
             subInt.update(startingState);
             break;
 
-          case "setDefaultYaml":
+          case "setDefaultYaml":{
+            const hasAnyTestGames = curEntry.games.reduce(
+              (r: boolean, i) => r || isTestGame(i),
+              false
+            );
+            if (hasAnyTestGames) {
+              subInt.update({
+                content: "This YAML contains games in testing, and cannot be used as your default YAML.",
+              });
+              return;
+            }
             await PlayerTable.update(
               { defaultCode: curEntry.code },
               {
@@ -212,7 +226,7 @@ export class YamlManager {
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
               await this.GetYamlOptions(true)
             );
-            break;
+            }break;
 
           case "deleteYaml":
             subInt.update({
