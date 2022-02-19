@@ -210,7 +210,7 @@ export class YamlManager {
               components: [buttonRow],
             });
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptions()
+              await this.GetYamlOptions(true)
             );
             break;
 
@@ -244,22 +244,24 @@ export class YamlManager {
                 { defaultCode: null },
                 { where: { defaultCode: curEntry.code } }
               ),
-              unlink((pathJoin('yamls', curEntry.userId, `${curEntry.filename}.yaml`)))
+              unlink(
+                pathJoin("yamls", curEntry.userId, `${curEntry.filename}.yaml`)
+              ),
             ]);
 
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptions()
+              await this.GetYamlOptions(true)
             );
             curEntry = null;
             subInt.update(
-              Object.assign<InteractionUpdateOptions, InteractionUpdateOptions, InteractionUpdateOptions>(
-                {},
-                startingState,
-                {
-                  content:
-                    "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
-                }
-              )
+              Object.assign<
+                InteractionUpdateOptions,
+                InteractionUpdateOptions,
+                InteractionUpdateOptions
+              >({}, startingState, {
+                content:
+                  "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
+              })
             );
             break;
 
@@ -308,7 +310,7 @@ export class YamlManager {
             await this.UpdateYaml(curEntry.code, retval[0]);
             curEntry = await YamlTable.findByPk(curEntry.code);
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptions()
+              await this.GetYamlOptions(true)
             );
             msg.edit({
               content: `Thanks! YAML has been updated.`,
@@ -317,7 +319,7 @@ export class YamlManager {
           } else {
             await this.AddYamls(...retval);
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptions()
+              await this.GetYamlOptions(true)
             );
             msg.edit({
               content: `Thanks! Added ${retval.length} YAML(s) to your collection.`,
@@ -491,29 +493,43 @@ export class YamlManager {
     return unlink(pathJoin(this.userDir, `${existingYaml.filename}.yaml`));
   }
 
-  public async GetYamlOptions(showTestGames = false): Promise<MessageSelectOptionData[]> {
+  public async GetYamlOptions(
+    showTestGames = false
+  ): Promise<MessageSelectOptionData[]> {
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
       (await PlayerTable.create({ userId: this.userId, defaultCode: null }));
     const retval = await YamlTable.findAll({
       where: { userId: this.userId },
     }).then((r) =>
-      r.filter(i => {
-        const hasAnyTestGames = i.games.reduce((r: boolean, i) => r || isTestGame(i), false);
-        return showTestGames || !hasAnyTestGames;
-      })
-      .map((i) => {
-        const hasAnyTestGames = i.games.reduce((r: boolean, i) => r || isTestGame(i), false);
-        return {
-          label:
-            i.description && i.description.length > 0
-              ? i.description
-              : "No description provided",
-          description: i.games.join(", "),
-          value: i.code,
-          emoji: i.code === playerEntry?.defaultCode ? "⚔️" : hasAnyTestGames ? "🧪" : undefined,
-        } as MessageSelectOptionData;
-      })
+      r
+        .filter((i) => {
+          const hasAnyTestGames = i.games.reduce(
+            (r: boolean, i) => r || isTestGame(i),
+            false
+          );
+          return showTestGames || !hasAnyTestGames;
+        })
+        .map((i) => {
+          const hasAnyTestGames = i.games.reduce(
+            (r: boolean, i) => r || isTestGame(i),
+            false
+          );
+          return {
+            label:
+              i.description && i.description.length > 0
+                ? i.description
+                : "No description provided",
+            description: i.games.join(", "),
+            value: i.code,
+            emoji:
+              i.code === playerEntry?.defaultCode
+                ? "⚔️"
+                : hasAnyTestGames
+                ? "🧪"
+                : undefined,
+          } as MessageSelectOptionData;
+        })
     );
 
     return retval.length === 0
@@ -614,5 +630,11 @@ export class YamlManager {
     interaction?.followUp(
       `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s), and reset ${defaultsAffected} defaults.`
     );
+  }
+
+  static async ContainsTestGames(code: string) {
+    const yaml = await YamlTable.findByPk(code);
+    if (!yaml) return false;
+    return yaml.games.reduce((r: boolean, i) => r && isTestGame(i), false);
   }
 }
