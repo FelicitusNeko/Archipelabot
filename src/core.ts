@@ -5,7 +5,7 @@ import {
 import * as YAML from "yaml";
 
 import { existsSync, readFileSync, statSync } from "fs";
-import { mkdir, stat, readFile } from "fs/promises";
+import { mkdir } from "fs/promises";
 import { get as httpsGet } from "https";
 import { resolve as pathResolve } from "path";
 import { spawn } from "child_process";
