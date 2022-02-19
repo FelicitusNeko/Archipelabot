@@ -4,13 +4,11 @@ import {
 } from "discord.js";
 import * as YAML from "yaml";
 
-import { existsSync } from "fs";
-import { mkdir } from "fs/promises";
+import { existsSync, readFileSync, statSync } from "fs";
+import { mkdir, stat, readFile } from "fs/promises";
 import { get as httpsGet } from "https";
 import { resolve as pathResolve } from "path";
 import { spawn } from "child_process";
-
-import * as gameList from "./gamelist.json";
 
 /** The current state of a given game. */
 export enum GameState {
@@ -58,6 +56,27 @@ export interface YamlData {
   data: string;
 }
 
+export interface GameList {
+  games: string[];
+  testgames?: string[];
+}
+
+/**
+ * Returns the current list of valid games.
+ */
+const GetGameList = (() => {
+  let gameList = {games:[]} as GameList;
+  let lastModified = new Date(0);
+  return () => {
+    const fileinfo = statSync("gamelist.json");
+    if (fileinfo.mtime !== lastModified) {
+      gameList = JSON.parse(readFileSync("gamelist.json").toString()) as GameList;
+      lastModified = fileinfo.mtime;
+    }
+    return gameList;
+  }
+})();
+
 /**
  * Creates a file system path, if it does not already exist.
  * @param path The directory path to create.
@@ -83,12 +102,32 @@ const GetFile = (url: string) => {
 };
 
 /**
+ * Tests whether a given game is available to use in Archipelago.
+ * @param game The game to check.
+ * @returns Whether the given game is valid.
+ */
+const isValidGame = (game: string) => {
+  const gameList = GetGameList();
+  return [...gameList.games, ...(gameList.testgames ?? [])].includes(game);
+}
+
+/**
+ * Tests whether a given game is in testing stage. If so, it can only be used in test runs.
+ * @param game The game to check.
+ * @returns Whether the given game is a game in testing stage.
+ */
+const isTestGame = (game: string) => {
+  const gameList = GetGameList();
+  if (!gameList.testgames) return false;
+  return gameList.testgames.includes(game);
+}
+
+/**
  * Runs a quick sanity check on the given YAML data.
  * @param data The stringified YAML data.
  * @returns `true` if the YAML data looks fine; otherwise `false`.
  */
 const QuickValidateYaml = (data: string) => {
-  const gameListStr = gameList as string[];
   try {
     const yamlIn = (() => {
       try {
@@ -113,50 +152,41 @@ const QuickValidateYaml = (data: string) => {
       return parsedName;
     };
 
-    let nameList: string[] = [];
+    if (yamlIn.description === "") delete yamlIn.description;
+    const retval: YamlData = {
+      desc: yamlIn.description ?? "No description",
+      data,
+    };
+
     switch (typeof yamlIn.name) {
       case "object":
-        nameList = Object.keys(yamlIn.name).map(ValidateName);
+        retval.name = Object.keys(yamlIn.name).map(ValidateName);
         break;
       case "string":
-        nameList = [ValidateName(yamlIn.name)];
+        retval.name = [ValidateName(yamlIn.name)];
         break;
       case "undefined":
         throw new Error("Name missing");
     }
 
-    if (yamlIn.description === "") delete yamlIn.description;
-    const retval: YamlData = {
-      desc: yamlIn.description ?? "No description",
-      name: nameList,
-      data,
-    };
-
     switch (typeof yamlIn.game) {
       case "object":
-        {
-          const games = yamlIn.game as Record<string, number>;
-          for (const game of Object.keys(games)) {
-            if (!gameListStr.includes(game))
-              throw new Error(`Game ${game} not in valid game list`);
-            if ((yamlIn.game[game] as number) === 0) continue;
-            if (yamlIn[game] === undefined)
-              throw new Error(`Settings not defined for game ${game}`);
-          }
-
-          retval.games = Object.keys(games);
-        }
+        retval.games = Object.keys(yamlIn.game as Record<string, number>);
         break;
       case "string":
-        if (!gameListStr.includes(yamlIn.game))
-          throw new Error(`Game ${yamlIn.game} not in valid game list`);
-        if (yamlIn[yamlIn.game] === undefined)
-          throw new Error(`Settings not defined for game ${yamlIn.game}`);
-
         retval.games = [yamlIn.game as string];
         break;
       case "undefined":
         throw new Error("No game defined");
+    }
+    if (!retval.games) throw new Error("Games not defined");
+    
+    for (const game of retval.games) {
+      if (!isValidGame(game))
+        throw new Error(`Game ${game} not in valid game list`);
+      //if ((yamlIn.game[game] as number) === 0) continue;
+      if (yamlIn[game] === undefined)
+        throw new Error(`Settings not defined for game ${game}`);
     }
 
     return retval;
@@ -240,6 +270,7 @@ const GenerateLetterCode = (
 export {
   MkdirIfNotExist,
   GetFile,
+  isTestGame,
   QuickValidateYaml,
   isPortAvailable,
   GenerateLetterCode,
