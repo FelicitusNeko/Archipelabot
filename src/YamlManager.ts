@@ -23,6 +23,7 @@ import {
   MkdirIfNotExist,
   GenerateLetterCode,
   YamlData,
+  isTestGame,
 } from "./core";
 import { PlayerTable, YamlTable } from "./Sequelize";
 
@@ -123,7 +124,7 @@ export class YamlManager {
         new MessageSelectMenu({
           customId: "yaml",
           placeholder: "Select a YAML",
-          options: await this.GetYamlOptions(),
+          options: await this.GetYamlOptions(true),
         }),
       ],
     });
@@ -490,14 +491,19 @@ export class YamlManager {
     return unlink(pathJoin(this.userDir, `${existingYaml.filename}.yaml`));
   }
 
-  public async GetYamlOptions(): Promise<MessageSelectOptionData[]> {
+  public async GetYamlOptions(showTestGames = false): Promise<MessageSelectOptionData[]> {
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
       (await PlayerTable.create({ userId: this.userId, defaultCode: null }));
     const retval = await YamlTable.findAll({
       where: { userId: this.userId },
     }).then((r) =>
-      r.map((i) => {
+      r.filter(i => {
+        const hasAnyTestGames = i.games.reduce((r: boolean, i) => r || isTestGame(i), false);
+        return showTestGames || !hasAnyTestGames;
+      })
+      .map((i) => {
+        const hasAnyTestGames = i.games.reduce((r: boolean, i) => r || isTestGame(i), false);
         return {
           label:
             i.description && i.description.length > 0
@@ -505,7 +511,7 @@ export class YamlManager {
               : "No description provided",
           description: i.games.join(", "),
           value: i.code,
-          emoji: i.code === playerEntry?.defaultCode ? "⚔️" : undefined,
+          emoji: i.code === playerEntry?.defaultCode ? "⚔️" : hasAnyTestGames ? "🧪" : undefined,
         } as MessageSelectOptionData;
       })
     );
@@ -576,9 +582,9 @@ export class YamlManager {
       }
       console.debug(dbCleanup);
       // then, remove any users that don't have any files (otherwise, they wouldn't get pruned at all)
-      // BUG: this currently obliterates the YAML table
+      // BUG: this currently obliterates the YAML table [possibly now fixed]
       await YamlTable.destroy({
-        where: { userId: { [SqlOp.notIn]: Object.keys(dbCleanup) } },
+        where: { userId: { [SqlOp.in]: Object.keys(dbCleanup) } },
       });
       // finally, remove missing entries for users
       for (const op of Object.entries(dbCleanup)) {
