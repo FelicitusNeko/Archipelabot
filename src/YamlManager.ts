@@ -529,12 +529,14 @@ export class YamlManager {
             (r: boolean, i) => r || isTestGame(i),
             false
           );
+          let games = i.games.join(", ");
+          if (games.length > 100) games = games.substring(0,97) + "…";
           return {
             label:
               i.description && i.description.length > 0
                 ? i.description
                 : "No description provided",
-            description: i.games.join(", "),
+            description: games,
             value: i.code,
             emoji:
               i.code === playerEntry?.defaultCode
