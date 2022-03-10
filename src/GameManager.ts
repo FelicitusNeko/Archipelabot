@@ -1,6 +1,10 @@
+import { spawn } from "child_process";
+import { createWriteStream } from "fs";
+import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
+import { basename, join as pathJoin, resolve as pathResolve } from "path";
+
 import { userMention } from "@discordjs/builders";
 import AdmZip = require("adm-zip");
-import { spawn } from "child_process";
 import {
   BaseCommandInteraction,
   Client as DiscordClient,
@@ -14,21 +18,18 @@ import {
   MessageSelectMenu,
   ReactionCollector,
 } from "discord.js";
-import { createWriteStream } from "fs";
-import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
-import { basename, join as pathJoin, resolve as pathResolve } from "path";
 import { Op as SqlOp } from "sequelize/dist";
+
 import {
+  GameFunctionState,
   GameState,
   GenerateLetterCode,
-  GetFile,
+  GetStdFunctionStateErrorMsg,
   isPortAvailable,
-  isTestGame,
   MkdirIfNotExist,
-  QuickValidateYaml,
 } from "./core";
-import { GameTable, PlayerTable, YamlTable } from "./Sequelize";
-import { YamlManager } from "./YamlManager";
+import { GameTable, PlayerTable } from "./Sequelize";
+import { YamlListenerResult, YamlManager } from "./YamlManager";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
@@ -284,8 +285,9 @@ export class GameManager {
 
       const { _msg } = this;
 
+      // TODO: Request YAMLs from players whose default YAML has an invalid game in it
       await Promise.all(
-        missingDefaults.map((i) => this.RequestYaml(i, joinSelect.includes(i)))
+        missingDefaults.map((i) => this.RequestYaml(i, !joinSelect.includes(i)))
       ).then((responses) => {
         _msg.edit(
           "Everyone's responses have been received. Now generating the game..."
@@ -305,6 +307,9 @@ export class GameManager {
     userId: string,
     missingDefault = false
   ): Promise<[string, string | null]> {
+    const worstValidState = this._testGame
+      ? GameFunctionState.Testing
+      : GameFunctionState.Playable;
     const user = this._client.users.cache.get(userId);
     if (!user) return [userId, null];
     const yamlMgr = new YamlManager(this._client, userId);
@@ -325,7 +330,11 @@ export class GameManager {
             new MessageSelectMenu({
               customId: "selectYaml",
               placeholder: "Select a YAML",
-              options: await yamlMgr.GetYamlOptions(this._testGame),
+              options: await yamlMgr.GetYamlOptionsV2(
+                this._testGame
+                  ? GameFunctionState.Testing
+                  : GameFunctionState.Playable
+              ),
             }),
           ],
         }),
@@ -333,7 +342,7 @@ export class GameManager {
           components: [
             new MessageButton({
               customId: "withdraw",
-              label: "Withdraw",
+              label: "Withdraw from this game",
               style: "DANGER",
             }),
           ],
@@ -341,8 +350,29 @@ export class GameManager {
       ],
     })) as DiscordMessage;
 
-    return new Promise((f: (value: [string, string | null]) => void) => {
+    return (async (): Promise<[string, string | null]> => {
       let retval: string | null = null;
+      let done = false;
+
+      const GetNewStatus = (status: GameFunctionState) => {
+        if (
+          status === GameFunctionState.Playable ||
+          (status === GameFunctionState.Testing && this._testGame)
+        )
+          return null;
+        else
+          return {
+            content: GetStdFunctionStateErrorMsg(
+              status,
+              "in this game. Please select a different YAML"
+            ),
+          };
+      };
+
+      let { result, terminate } = await YamlManager.YamlListener(
+        msg,
+        timeout * 1000 - Date.now()
+      );
 
       const subInteractionHandler = async (subInt: DiscordInteraction) => {
         if (!subInt.isButton() && !subInt.isSelectMenu()) return;
@@ -352,10 +382,7 @@ export class GameManager {
         if (subInt.isButton()) {
           switch (subInt.customId) {
             case "withdraw":
-              subInt.update(
-                "Sorry to hear that. Your request has been withdrawn."
-              );
-              msgCollector.stop("withdrawn");
+              terminate("withdrawn");
               break;
           }
         } else if (subInt.isSelectMenu()) {
@@ -366,122 +393,82 @@ export class GameManager {
                 "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
             });
           else {
-            if (
-              !this._testGame &&
-              (await YamlManager.ContainsTestGames(code))
-            ) {
-              subInt.update(
-                "This YAML contains games in testing phase and cannot be used in this game. Please select a different YAML."
-              );
-            } else {
+            const status = GetNewStatus(
+              await YamlManager.GetWorstStatusByCode(code)
+            );
+            if (status) subInt.update(status);
+            else {
               retval = code;
-              subInt.update(
-                "Thanks! Your YAML has been received and will be used in your upcoming game."
-              );
-              msgCollector.stop("selectedyaml");
+              terminate("selectedyaml");
             }
           }
         }
       };
       this._client.on("interactionCreate", subInteractionHandler);
 
-      const msgCollector = msg.channel.createMessageCollector({
-        filter: (msgIn) =>
-          msgIn.type === "REPLY" &&
-          msgIn.reference?.messageId === msg.id &&
-          msgIn.attachments.size > 0,
-        time: 30 * 60 * 1000,
-      });
-      // TODO: Make this a YamlManager thing
-      msgCollector?.on("collect", (msgIn) => {
-        const yamls = msgIn.attachments.filter(
-          (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
-        );
-        if (yamls.size === 0) msg.edit("That wasn't a YAML! Please try again.");
-        else {
-          Promise.all(yamls.map((i) => GetFile(i.url)))
-            .then(async (i) => {
-              const validate = QuickValidateYaml(i[0]);
-              if (!validate.error) {
-                if (msgIn.deletable) msgIn.delete();
-                else msgIn.react("👀");
+      const waitForResponse = async ({
+        reason,
+        retval: ylRetval,
+      }: YamlListenerResult) => {
+        let content = `Unrecognized reason code: ${reason}`;
+        done = true;
 
-                if (!this._testGame && validate.games) {
-                  const hasAnyTestGames = validate.games.reduce(
-                    (r: boolean, i) => r || isTestGame(i),
-                    false
-                  );
-                  if (hasAnyTestGames) {
-                    msg.edit(
-                      "This YAML contains games in testing phase and cannot be used in this game. Please select a different YAML."
-                    );
-                    return;
-                  }
-                }
-
-                const filepath = pathJoin("./yamls", userId);
-                const filename = pathJoin(filepath, msg.id + ".yaml");
-                await MkdirIfNotExist(filepath);
-
-                const code = GenerateLetterCode(
-                  (await YamlTable.findAll({ attributes: ["code"] })).map(
-                    (i) => i.code
-                  )
-                );
-                await Promise.all([
-                  PlayerTable.findByPk(userId).then(
-                    (i) =>
-                      i ?? PlayerTable.create({ userId, defaultCode: null })
-                  ),
-                  YamlTable.create({
-                    code,
-                    userId,
-                    playerName: validate.name ?? ["Who?"],
-                    description: validate.desc ?? "No description given",
-                    games: validate.games ?? ["A Link to the Past"],
-                    filename: msg.id,
-                  }),
-                  writeFile(filename, validate.data),
-                ]);
-
-                retval = code;
-                msgCollector.stop("newyaml");
-              } else {
-                msg.edit({
-                  content: `The supplied YAML was invalid: ${validate.error}. Please try again.`,
-                });
-              }
-            })
-            .catch((e) => {
-              msg.edit("An error occurred. Check debug log.");
-              console.error(e);
-            });
+        switch (reason) {
+          case "gotyaml":
+            if (ylRetval[0].worstState === undefined) {
+              content =
+                "For some reason, no worst state was provided for this YAML. This is probably a bug.";
+              console.debug(ylRetval[0]);
+              done = false;
+            } else if (ylRetval[0].worstState > worstValidState) {
+              content = GetStdFunctionStateErrorMsg(
+                ylRetval[0].worstState,
+                "in this game. Please select or submit a different YAML"
+              );
+              done = false;
+            } else {
+              [retval] = await new YamlManager(this._client, userId).AddYamls(
+                ylRetval[0]
+              );
+              content =
+                "Thanks! Your new YAML has been added to your library and will be used in your upcoming game.";
+            }
+            break;
+          case "selectedyaml":
+            content = "Thanks! That YAML will be used in your upcoming game.";
+            break;
+          case "yamlerror":
+            content = `There was a problem parsing the YAML: \`${ylRetval[0].error}\`\nPlease review the error and try again.`;
+            done = false;
+            break;
+          case "notyaml":
+            content =
+              "That doesn't look like a valid YAML. Please check your submission and try again.";
+            done = false;
+            break;
+          case "withdrawn":
+            content = "Sorry to hear that. Your request has been withdrawn.";
+            break;
+          case "time":
+            content = "Sorry, this YAML request has timed out.";
+            break;
         }
-      });
-      msgCollector.on("end", (_collected, reason) => {
-        const finallyMsg = (() => {
+
+        msg.edit({ content, components: done ? [] : undefined });
+        if (done)
           console.info(`${this._code}: ${user.username} responded ${reason}`);
-          switch (reason) {
-            case "time":
-              return "Sorry, this YAML request has timed out.";
-            case "newyaml":
-              return "Thanks! Your new YAML has been added to your library and will be used in your upcoming game.";
-            case "selectedyaml":
-              return "Thanks! That YAML will be used in your upcoming game.";
-            case "withdrawn":
-              return "Sorry to hear that. Your request has been withdrawn.";
-            default:
-              return `Unrecognized reason code: ${reason}`;
-          }
-        })();
-        msg.edit({
-          content: finallyMsg,
-          components: [],
-        });
-        this._client.off("interactionCreate", subInteractionHandler);
-        f([userId, retval]);
-      });
-    });
+      };
+      while (!done) {
+        await result.then(waitForResponse);
+        if (!done)
+          ({ result, terminate } = await YamlManager.YamlListener(
+            msg,
+            timeout * 1000 - Date.now()
+          ));
+      }
+      this._client.off("interactionCreate", subInteractionHandler);
+      return [userId, retval];
+    })();
   }
 
   /**

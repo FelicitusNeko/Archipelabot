@@ -1,16 +1,18 @@
+import { spawn } from "child_process";
+import { existsSync, readFileSync, statSync } from "fs";
+import { mkdir } from "fs/promises";
+import { get as httpsGet } from "https";
+import { resolve as pathResolve } from "path";
+
 import {
   BaseCommandInteraction,
   ChatInputApplicationCommandData,
 } from "discord.js";
 import * as YAML from "yaml";
 
-import { existsSync, readFileSync, statSync } from "fs";
-import { mkdir } from "fs/promises";
-import { get as httpsGet } from "https";
-import { resolve as pathResolve } from "path";
-import { spawn } from "child_process";
+import { YamlManager } from "./YamlManager";
 
-/** The current state of a given game. */
+/** The current state of a given AP session. */
 export enum GameState {
   /** The game data has been loaded into the game manager. */
   Ready,
@@ -29,6 +31,22 @@ export enum GameState {
   GenerationFailed,
   /** The game was cancelled, either manually or due to lack of players. */
   Cancelled,
+}
+
+/** The current functional state of a given game. */
+export enum GameFunctionState {
+  /** The game is available to play. */
+  Playable,
+  /** The game is only available for testing. */
+  Testing,
+  /** The game is currently broken. */
+  Broken,
+  /** The game will soon be available. */
+  Upcoming,
+  /** The game has been removed. */
+  Excluded,
+  /** The game is not on the list in any category. */
+  Unknown,
 }
 
 /**
@@ -52,6 +70,8 @@ export interface YamlData {
   desc?: string;
   /** The message ID where the YAML was received. */
   msgId?: string;
+  /** The worst state of any given game in this YAML. */
+  worstState?: GameFunctionState;
   /** The stringified data for this YAML. */
   data: string;
 }
@@ -59,10 +79,14 @@ export interface YamlData {
 export interface GameList {
   games: string[];
   testgames?: string[];
+  broken?: string[];
+  upcoming?: string[];
+  excluded?: string[];
 }
 
 /**
  * Returns the current list of valid games.
+ * @returns {GameList} The current list of games.
  */
 const GetGameList = (() => {
   let gameList = {games:[]} as GameList;
@@ -102,30 +126,28 @@ const GetFile = (url: string) => {
 };
 
 /**
- * Tests whether a given game is available to use in Archipelago.
+ * Checks the game list to see whether a game is available to be played, or else why it is not available.
  * @param game The game to check.
- * @returns Whether the given game is valid.
+ * @returns An indicator of what stage the given game is in, or `GameFunctionState.Unknown` if it is not in the list.
  */
-const isValidGame = (game: string) => {
-  const gameList = GetGameList();
-  return [...gameList.games, ...(gameList.testgames ?? [])].includes(game);
-}
-
-/**
- * Tests whether a given game is in testing stage. If so, it can only be used in test runs.
- * @param game The game to check.
- * @returns Whether the given game is a game in testing stage.
- */
-const isTestGame = (game: string) => {
-  const gameList = GetGameList();
-  if (!gameList.testgames) return false;
-  return gameList.testgames.includes(game);
+const GetGameFunctionState = (game: string): GameFunctionState => {
+  for (const [category, list] of (Object.entries(GetGameList()) as [string, string[]][])) {
+    if (list.includes(game)) switch(category) {
+      case "games": return GameFunctionState.Playable;
+      case "testgames": return GameFunctionState.Testing;
+      case "broken": return GameFunctionState.Broken;
+      case "upcoming": return GameFunctionState.Upcoming;
+      case "excluded": return GameFunctionState.Excluded;
+      default: return GameFunctionState.Unknown;
+    }
+  }
+  return GameFunctionState.Unknown;
 }
 
 /**
  * Runs a quick sanity check on the given YAML data.
  * @param data The stringified YAML data.
- * @returns `true` if the YAML data looks fine; otherwise `false`.
+ * @returns {YamlData} A set of analysis data pertaining to the scanned YAML.
  */
 const QuickValidateYaml = (data: string) => {
   try {
@@ -181,13 +203,13 @@ const QuickValidateYaml = (data: string) => {
     }
     if (!retval.games) throw new Error("Games not defined");
     
-    for (const game of retval.games) {
-      if (!isValidGame(game))
-        throw new Error(`Game ${game} not in valid game list`);
-      //if ((yamlIn.game[game] as number) === 0) continue;
+    retval.worstState = YamlManager.GetWorstStatus(retval.games);
+    if (retval.worstState >= GameFunctionState.Excluded)
+      throw new Error(`Invalid game found in this YAML`);
+
+    for (const game of retval.games)
       if (yamlIn[game] === undefined)
         throw new Error(`Settings not defined for game ${game}`);
-    }
 
     return retval;
   } catch (e) {
@@ -267,11 +289,29 @@ const GenerateLetterCode = (
   return retval;
 };
 
+const GetStdFunctionStateErrorMsg = (reason: GameFunctionState, cannotBeUsed: string) => {
+  switch (reason) {
+    case GameFunctionState.Playable:
+      return `This YAML is valid to be used ${cannotBeUsed}.`;
+    case GameFunctionState.Testing:
+      return `This YAML contains games in testing, and cannot be used ${cannotBeUsed}.`;
+    case GameFunctionState.Upcoming:
+      return `This YAML contains games not yet available in AP, and cannot be used ${cannotBeUsed}.`;
+    case GameFunctionState.Broken:
+      return `This YAML contains games that are currently broken, and cannot be used ${cannotBeUsed}.`;
+    case GameFunctionState.Excluded:
+      return `This YAML contains games that are no longer part of AP, and cannot be used ${cannotBeUsed}.`;
+    case GameFunctionState.Unknown:
+      return `This YAML contains games in an unknown state, and cannot be used ${cannotBeUsed}.`;
+  }
+}
+
 export {
   MkdirIfNotExist,
   GetFile,
-  isTestGame,
+  GetGameFunctionState,
   QuickValidateYaml,
   isPortAvailable,
   GenerateLetterCode,
+  GetStdFunctionStateErrorMsg
 };
