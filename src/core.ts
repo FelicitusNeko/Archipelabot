@@ -43,6 +43,8 @@ export enum GameFunctionState {
   Broken,
   /** The game will soon be available. */
   Upcoming,
+  /** The game is classified as a Support game, which is meant to be played alongside another game. */
+  Support,
   /** The game has been removed. */
   Excluded,
   /** The game is not on the list in any category. */
@@ -82,6 +84,7 @@ export interface GameList {
   broken?: string[];
   upcoming?: string[];
   excluded?: string[];
+  support?: string[];
 }
 
 /**
@@ -126,6 +129,25 @@ const GetFile = (url: string) => {
 };
 
 /**
+ * Determines whether a given list of games contains all Support games or not, or whether there is a mix.
+ * @param games List of games to evaolute against the Support games list.
+ * @returns Whether every game in the given list is a Support game. `null` if there is a mix.
+ */
+ const ContainsSupportGames = (...games: string[]) => {
+  const {support} = GetGameList();
+  if (!support) return false;
+
+  let allSupport: boolean | undefined = undefined;
+  for (const game in games) {
+    const isSupport = support.includes(game);
+    if (allSupport === undefined) allSupport = isSupport;
+    else if (allSupport !== isSupport) return null;
+  }
+  
+  return allSupport;
+}
+
+/**
  * Checks the game list to see whether a game is available to be played, or else why it is not available.
  * @param game The game to check.
  * @returns An indicator of what stage the given game is in, or `GameFunctionState.Unknown` if it is not in the list.
@@ -137,6 +159,7 @@ const GetGameFunctionState = (game: string): GameFunctionState => {
       case "testgames": return GameFunctionState.Testing;
       case "broken": return GameFunctionState.Broken;
       case "upcoming": return GameFunctionState.Upcoming;
+      case "support": return GameFunctionState.Support;
       case "excluded": return GameFunctionState.Excluded;
       default: return GameFunctionState.Unknown;
     }
@@ -202,6 +225,9 @@ const QuickValidateYaml = (data: string) => {
         throw new Error("No game defined");
     }
     if (!retval.games) throw new Error("Games not defined");
+
+    if (ContainsSupportGames(...retval.games) === null)
+      throw new Error(`Cannot mix Support games with others`);
     
     retval.worstState = YamlManager.GetWorstStatus(retval.games);
     if (retval.worstState >= GameFunctionState.Excluded)
@@ -301,11 +327,12 @@ const GetStdFunctionStateErrorMsg = (reason: GameFunctionState, cannotBeUsed: st
       return `This YAML contains games that are currently broken, and cannot be used ${cannotBeUsed}.`;
     case GameFunctionState.Excluded:
       return `This YAML contains games that are no longer part of AP, and cannot be used ${cannotBeUsed}.`;
+    case GameFunctionState.Support:
+      return `This YAML contains a support game. Whether it can be used ${cannotBeUsed} is up to the host.`;
     case GameFunctionState.Unknown:
       return `This YAML contains games in an unknown state, and cannot be used ${cannotBeUsed}.`;
   }
 }
-
 export {
   MkdirIfNotExist,
   GetFile,
@@ -313,5 +340,6 @@ export {
   QuickValidateYaml,
   isPortAvailable,
   GenerateLetterCode,
-  GetStdFunctionStateErrorMsg
+  GetStdFunctionStateErrorMsg,
+  ContainsSupportGames
 };

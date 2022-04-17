@@ -364,7 +364,7 @@ export class Archipelabot {
               const game = await GameManager.NewGame(this._client, isTestGame);
               this._games.push(game);
               await game.RecruitGame(interaction);
-              console.debug(game);
+              //console.debug(game);
             }
           }
           break;

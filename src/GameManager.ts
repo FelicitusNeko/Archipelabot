@@ -33,34 +33,30 @@ import { YamlListenerResult, YamlManager } from "./YamlManager";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
-/*
-export interface GameRecruitmentProcess {
-  msg: DiscordMessage;
-  guildId: string;
-  channelId: string;
-  startingUser: string;
-  reactionCollector: ReactionCollector;
-  defaultUsers: string[];
-  selectUsers: string[];
+enum YamlRequestType {
+  /** The player is submitting a non-default YAML. */
+  Shield,
+  /** The player tried to submit their default YAML, but does not have a default assigned. */
+  MissingDefault,
+  /** The player is submitting a support YAML. */
+  Support,
 }
 
-export interface RunningGame {
-  msg?: DiscordMessage;
-  guildId: string;
-  channelId: string;
-  startingUser: string;
-  state: GameState;
-}
-*/
-
-interface Players {
+interface PlayersV2 {
   /** Players who have indicated they're joining with their default YAML. */
-  joinDefault: string[];
+  joinDefault: Set<string>;
   /** Players who have indicated they're joining with a different YAML. */
-  joinSelect: string[];
+  joinSelect: Set<string>;
+  /** Players who have indicated they're joining with a Support game. */
+  joinSupport: Set<string>;
   /** Players who are playing this game. */
-  playing: string[];
+  playing: Set<string>;
 }
+
+const LogAndReturnAsync = async <T>(data: T) => {
+  console.debug(data);
+  return data;
+};
 
 /** The interface for creating and managing games. */
 export class GameManager {
@@ -84,10 +80,11 @@ export class GameManager {
   /** The current hot message for this game. */
   private _msg?: DiscordMessage;
   /** The players for this game. */
-  private _players: Players = {
-    joinDefault: [],
-    joinSelect: [],
-    playing: [],
+  private _players: PlayersV2 = {
+    joinDefault: new Set(),
+    joinSelect: new Set(),
+    joinSupport: new Set(),
+    playing: new Set(),
   };
 
   /** The reaction collector for this game. */
@@ -121,8 +118,8 @@ export class GameManager {
   /** The number of players playing this game. */
   public get playerCount() {
     const { joinDefault, joinSelect, playing } = this._players;
-    if (playing.length > 0) return playing.length;
-    else return [...joinDefault, ...joinSelect].length;
+    if (playing.size > 0) return playing.size;
+    else return new Set([...joinDefault, ...joinSelect]).size;
   }
 
   /**
@@ -168,7 +165,8 @@ export class GameManager {
                 "Testing YAMLs are available for this game.\n\n"
               : "") +
             "React ⚔️ to join into this game with your default YAML.\n" +
-            "React 🛡️ to join with a different YAML.",
+            "React 🛡️ to join with a different YAML.\n" +
+            "React 🗡️ to join with a Support game.",
           footer: {
             text: `Game code: ${this._code}`,
           },
@@ -180,36 +178,56 @@ export class GameManager {
       filter: (reaction, user) =>
         this.clientId !== user.id &&
         reaction.emoji.name !== null &&
-        ["⚔️", "🛡️"].includes(reaction.emoji.name),
+        ["⚔️", "🛡️", "🗡️"].includes(reaction.emoji.name),
       dispose: true,
     });
 
     const { _msg, _reactCollector } = this;
+    const { joinDefault, joinSelect, joinSupport } = this._players;
 
+    //for (const emoji in ["⚔️", "🛡️", "🗡️"]) await _msg.react(emoji);
     await _msg.react("⚔️");
     await _msg.react("🛡️");
+    await _msg.react("🗡️");
 
     _reactCollector.on("collect", (reaction, user) => {
-      if (reaction.emoji.name === "⚔️") this._players.joinDefault.push(user.id);
-      else if (reaction.emoji.name === "🛡️")
-        this._players.joinSelect.push(user.id);
+      switch (reaction.emoji.name) {
+        case "⚔️":
+          joinDefault.add(user.id);
+          break;
+        case "🛡️":
+          joinSelect.add(user.id);
+          break;
+        case "🗡️":
+          joinSupport.add(user.id);
+          break;
+      }
     });
     _reactCollector.on("remove", (reaction, user) => {
-      if (reaction.emoji.name === "⚔️")
-        this._players.joinDefault = this._players.joinDefault.filter(
-          (i) => i != user.id
-        );
-      else if (reaction.emoji.name === "🛡️")
-        this._players.joinSelect = this._players.joinSelect.filter(
-          (i) => i != user.id
-        );
+      switch (reaction.emoji.name) {
+        case "⚔️":
+          joinDefault.delete(user.id);
+          break;
+        case "🛡️":
+          joinSelect.delete(user.id);
+          break;
+        case "🗡️":
+          joinSupport.delete(user.id);
+          break;
+      }
     });
     _reactCollector.on("dispose", (reaction) => {
       // TODO: find out when this event fires (if it does)
-      console.debug("Dispose:", reaction);
-      if (reaction.emoji.name === "⚔️") {
-        _msg.react("⚔️");
-        this._players.joinDefault = [];
+      switch (reaction.emoji.name) {
+        case "⚔️":
+          joinDefault.clear();
+          break;
+        case "🛡️":
+          joinSelect.clear();
+          break;
+        case "🗡️":
+          joinSupport.clear();
+          break;
       }
     });
     _reactCollector.on("end", async (_collected, reason) => {
@@ -240,9 +258,12 @@ export class GameManager {
    * @param interaction The interaction leading to the creation of a new game.
    */
   async CreateGame(interaction: BaseCommandInteraction) {
-    const { joinDefault, joinSelect } = this._players;
+    const { joinDefault, joinSelect, joinSupport } = this._players;
     this._reactCollector?.stop("aplaunch");
     this._reactCollector = undefined;
+
+    for (const user in joinSelect) joinDefault.delete(user);
+    console.debug("Join lists:", joinDefault, joinSelect, joinSupport);
 
     if (!PYTHON_PATH)
       throw new Error("Python path has not been defined! Game cannot start.");
@@ -251,28 +272,32 @@ export class GameManager {
         "Archipelago path has not been defined! Game cannot start."
       );
 
-    const defaultYamls = await PlayerTable.findAll({
+    const joinDefaultAr = [...joinDefault];
+    const defaultYamls: PlayerTable[] = await PlayerTable.findAll({
       attributes: ["userId", "defaultCode"],
       where: {
         userId: {
-          [SqlOp.in]: joinDefault.filter((i) => !joinSelect.includes(i)),
+          [SqlOp.in]: [...joinDefault],
         },
         defaultCode: { [SqlOp.not]: null },
       },
     });
     const hasDefaults = defaultYamls.map((i) => i.userId);
-    const missingDefaults = joinDefault
-      .filter((i) => !hasDefaults.includes(i) && !joinSelect.includes(i))
-      .concat(joinSelect);
+    const yamlRequests = new Set(
+      joinDefaultAr
+        .filter((i) => !hasDefaults.includes(i))
+        .concat(...joinSelect)
+    );
 
-    this._state = GameState.Assembling;
+    // TODO: Request YAMLs from players whose default YAML has an invalid game in it
 
-    if (missingDefaults.length === 0) {
+    if (yamlRequests.size + joinSupport.size === 0) {
       this._msg = (await interaction.followUp(
         "Now generating the game..."
       )) as DiscordMessage;
       this.LaunchGame(...defaultYamls);
     } else {
+      const requestingUsers = new Set([...yamlRequests, ...joinSupport]);
       this._state = GameState.GatheringYAMLs;
 
       this._msg = (await interaction.followUp(
@@ -280,15 +305,45 @@ export class GameManager {
           `The game will start <t:${
             Math.floor(Date.now() / 1000) + 30 * 60
           }:R> if not everyone has responded.\n` +
-          missingDefaults.map((i) => userMention(i)).join(", ")
+          [...requestingUsers].map((i) => userMention(i)).join(", ")
       )) as DiscordMessage;
 
       const { _msg } = this;
 
-      // TODO: Request YAMLs from players whose default YAML has an invalid game in it
-      await Promise.all(
-        missingDefaults.map((i) => this.RequestYaml(i, !joinSelect.includes(i)))
-      ).then((responses) => {
+      const requests: Promise<[string, string | null]>[] = [];
+      const joinSupportRemain = new Set(joinSupport);
+      console.debug("Complete request list:", requestingUsers);
+      console.debug("YAML request lists:", yamlRequests);
+      for (const user of yamlRequests) {
+        console.debug("Requesting YAML from", user);
+        const request = this.RequestYamlV2(
+          user,
+          joinSelect.has(user)
+            ? YamlRequestType.Shield
+            : YamlRequestType.MissingDefault
+        ).then(LogAndReturnAsync);
+        requests.push(request);
+        if (joinSupportRemain.has(user)) {
+          console.debug("Also requesting support YAML from", user);
+          joinSupportRemain.delete(user);
+          requests.push(
+            this.RequestYamlV2(user, YamlRequestType.Support, request).then(
+              LogAndReturnAsync
+            )
+          );
+        }
+      }
+      for (const user of joinSupportRemain) {
+        console.debug("Requesting support YAML from", user);
+        requests.push(
+          this.RequestYamlV2(user, YamlRequestType.Support).then(
+            LogAndReturnAsync
+          )
+        );
+      }
+      console.debug("Requests:", requests);
+
+      await Promise.all(requests).then((responses) => {
         _msg.edit(
           "Everyone's responses have been received. Now generating the game..."
         );
@@ -299,30 +354,51 @@ export class GameManager {
 
   /**
    * Request a YAML from a participating player who is not using their default YAML.
+   * @async
    * @param userId The player to ask for a YAML to use.
-   * @param missingDefault Whether the player selected Default, but does not have a default YAML.
+   * @param requestType The type of request to submit.
+   * @param waitOn Optional. If provided, this request will chain off a previous request.
    * @returns A promise that resolves with the player's YAML selection, or `null` if none.
    */
-  private async RequestYaml(
+  private async RequestYamlV2(
     userId: string,
-    missingDefault = false
+    requestType: YamlRequestType,
+    waitOn?: Promise<[string, string | null]>
   ): Promise<[string, string | null]> {
-    const worstValidState = this._testGame
-      ? GameFunctionState.Testing
-      : GameFunctionState.Playable;
+    if (waitOn) await waitOn;
+
     const user = this._client.users.cache.get(userId);
-    if (!user) return [userId, null];
+    if (!user) {
+      console.warn("User %s not found", userId);
+      return [userId, null];
+    }
+
     const yamlMgr = new YamlManager(this._client, userId);
 
     //const yamls = await YamlTable.findAll({ where: { userId } });
     /** The time at which the YAML request will time out, in Unix timestamp format. */
     const timeout = Math.floor(Date.now() / 1000) + 30 * 60;
+    const states =
+      requestType === YamlRequestType.Support
+        ? [GameFunctionState.Support]
+        : [GameFunctionState.Playable];
+    if (requestType !== YamlRequestType.Support && this._testGame)
+      states.push(GameFunctionState.Testing);
+
+    const baseRequestMsg = (() => {
+      switch (requestType) {
+        case YamlRequestType.Shield:
+          return "Please select the YAML you wish to use from the dropdown box, or reply to this message with a new one.";
+        case YamlRequestType.MissingDefault:
+          return "Looks like you don't have a default YAML set up. Please select one from the dropdown box, or reply to this message with a new one.";
+        case YamlRequestType.Support:
+          return "Please select a support YAML to include into this game.";
+      }
+    })();
 
     const msg = (await user.send({
       content:
-        (!missingDefault
-          ? "Please select the YAML you wish to use from the dropdown box, or, alternatively, submit a new one by replying to this message with an attachment."
-          : "Looks like you don't have a default YAML set up. Please select one from the list, or reply to this message with a new one.") +
+        baseRequestMsg +
         ` If you've changed your mind, you can click on "Withdraw". This message will time out <t:${timeout}:R>.`,
       components: [
         new MessageActionRow({
@@ -330,11 +406,7 @@ export class GameManager {
             new MessageSelectMenu({
               customId: "selectYaml",
               placeholder: "Select a YAML",
-              options: await yamlMgr.GetYamlOptionsV2(
-                this._testGame
-                  ? GameFunctionState.Testing
-                  : GameFunctionState.Playable
-              ),
+              options: await yamlMgr.GetYamlOptionsV3(states),
             }),
           ],
         }),
@@ -355,11 +427,7 @@ export class GameManager {
       let done = false;
 
       const GetNewStatus = (status: GameFunctionState) => {
-        if (
-          status === GameFunctionState.Playable ||
-          (status === GameFunctionState.Testing && this._testGame)
-        )
-          return null;
+        if (states.includes(status)) return null;
         else
           return {
             content: GetStdFunctionStateErrorMsg(
@@ -390,7 +458,7 @@ export class GameManager {
           if (code === "noyaml")
             subInt.update({
               content:
-                "You don't seem to have any YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
+                "You don't seem to have any appropriate YAMLs assigned to you. Please submit one by replying to this message with an attachment.",
             });
           else {
             const status = GetNewStatus(
@@ -420,7 +488,7 @@ export class GameManager {
                 "For some reason, no worst state was provided for this YAML. This is probably a bug.";
               console.debug(ylRetval[0]);
               done = false;
-            } else if (ylRetval[0].worstState > worstValidState) {
+            } else if (!states.includes(ylRetval[0].worstState)) {
               content = GetStdFunctionStateErrorMsg(
                 ylRetval[0].worstState,
                 "in this game. Please select or submit a different YAML"
@@ -456,7 +524,9 @@ export class GameManager {
 
         msg.edit({ content, components: done ? [] : undefined });
         if (done)
-          console.info(`${this._code}: ${user.username} responded ${reason}`);
+          console.info(
+            `${this._code}: ${user.username} responded ${reason} to type-${requestType} request`
+          );
       };
       while (!done) {
         await result.then(waitForResponse);
@@ -492,7 +562,7 @@ export class GameManager {
       } else if (yamlEntry[1] !== null)
         playerList.push(yamlEntry as [string, string]);
     }
-    this._players.playing = playerList.map((i) => i[0]);
+    this._players.playing = new Set(playerList.map((i) => i[0]));
 
     const writeMsg = (msgContent: string | MessageEditOptions) => {
       this._msg?.edit(msgContent);
@@ -867,6 +937,7 @@ export class GameManager {
   }
 
   static async CleanupGames(interaction?: BaseCommandInteraction) {
+    // TODO: doesn't seem to be purging anything
     // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
     /** A Unix millisecond timestamp corresponding to two weeks before the current time. */
     const twoWeeksAgo = Date.now() - 1_209_600_000;

@@ -128,7 +128,7 @@ export class YamlManager {
         new MessageSelectMenu({
           customId: "yaml",
           placeholder: "Select a YAML",
-          options: await this.GetYamlOptionsV2(GameFunctionState.Unknown),
+          options: await this.GetYamlOptionsV3([]),
         }),
       ],
     });
@@ -215,7 +215,7 @@ export class YamlManager {
 
                 (buttonRow.components[1] as MessageButton).disabled = true;
                 (yamlRow.components[0] as MessageSelectMenu).setOptions(
-                  await this.GetYamlOptionsV2(GameFunctionState.Unknown)
+                  await this.GetYamlOptionsV3([])
                 );
                 subInt.update({
                   content: "Your default YAML has been changed to this one.",
@@ -267,7 +267,7 @@ export class YamlManager {
             ]);
 
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptionsV2(GameFunctionState.Unknown)
+              await this.GetYamlOptionsV3([])
             );
             curEntry = null;
             subInt.update(
@@ -327,7 +327,7 @@ export class YamlManager {
             await this.UpdateYaml(curEntry.code, retval[0]);
             curEntry = await YamlTable.findByPk(curEntry.code);
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptionsV2(GameFunctionState.Unknown)
+              await this.GetYamlOptionsV3([])
             );
             msg.edit({
               content: `Thanks! YAML has been updated.`,
@@ -336,7 +336,7 @@ export class YamlManager {
           } else {
             await this.AddYamls(...retval);
             (yamlRow.components[0] as MessageSelectMenu).setOptions(
-              await this.GetYamlOptionsV2(GameFunctionState.Unknown)
+              await this.GetYamlOptionsV3([])
             );
             msg.edit({
               content: `Thanks! Added ${retval.length} YAML(s) to your collection.`,
@@ -452,8 +452,8 @@ export class YamlManager {
    * @param maximumState Optional. The maximum worst function state to return YAMLs for. Defaults to {@link GameFunctionState.Playable}.
    * @returns {Promise<MessageSelectOptionData[]>} A promise that resolves into the list of available YAMLs, in {@link MessageSelectOptionData} form.
    */
-  public async GetYamlOptionsV2(
-    maximumState = GameFunctionState.Playable
+  public async GetYamlOptionsV3(
+    validStates: GameFunctionState[] = [GameFunctionState.Playable]
   ): Promise<MessageSelectOptionData[]> {
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
@@ -462,7 +462,11 @@ export class YamlManager {
       where: { userId: this.userId },
     }).then((r) =>
       r
-        .filter((i) => YamlManager.GetWorstStatus(i.games) <= maximumState)
+        .filter((i) =>
+          validStates.length
+            ? validStates.includes(YamlManager.GetWorstStatus(i.games))
+            : true
+        )
         .map((i) => {
           const emoji = YamlManager.GetEmoji(
             i.games,
@@ -676,7 +680,7 @@ export class YamlManager {
   }
 
   /**
-   * Determines which emoji to use for a given list of games, usually used in {@link YamlManager.GetYamlOptionsV2}.
+   * Determines which emoji to use for a given list of games, usually used in {@link YamlManager.GetYamlOptionsV3}.
    * @static
    * @param games The list of games to evaluate.
    * @param markDefault Whether to use the ⚔️ emoji to denote the user's default YAML.
@@ -692,6 +696,8 @@ export class YamlManager {
         return "💔";
       case GameFunctionState.Upcoming:
         return "⏳";
+      case GameFunctionState.Support:
+        return "🗡️";
       case GameFunctionState.Excluded:
         return "❌";
       case GameFunctionState.Unknown:
@@ -715,7 +721,7 @@ export class YamlManager {
   }
 
   /**
-   * Determines which emoji to use for a given list of games for a four-letter YAML code, usually used in {@link YamlManager.GetYamlOptionsV2}.
+   * Determines which emoji to use for a given list of games for a four-letter YAML code, usually used in {@link YamlManager.GetYamlOptionsV3}.
    * @static
    * @async
    * @param code The four-letter code of the YAML to retrieve.
