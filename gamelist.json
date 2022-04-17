@@ -14,12 +14,17 @@
     "Rogue Legacy",
     "Super Mario 64",
     "VVVVVV",
-    "Raft"
+    "Raft",
+    "Meritous",
+    "SMZ3",
+    "Hollow Knight"
   ],
   "testgames": [
-    "Meritous"
   ],
   "upcoming": [
-    "SMZ3"
+  ],
+  "support": [
+    "ChecksFinder",
+    "ArchipIDLE"
   ]
 }
