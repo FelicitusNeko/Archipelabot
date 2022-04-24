@@ -117,9 +117,9 @@ export class GameManager {
 
   /** The number of players playing this game. */
   public get playerCount() {
-    const { joinDefault, joinSelect, playing } = this._players;
+    const { joinDefault, joinSelect, joinSupport, playing } = this._players;
     if (playing.size > 0) return playing.size;
-    else return new Set([...joinDefault, ...joinSelect]).size;
+    else return new Set([...joinDefault, ...joinSelect, ...joinSupport]).size;
   }
 
   /**
