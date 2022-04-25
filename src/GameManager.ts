@@ -18,7 +18,7 @@ import {
   MessageSelectMenu,
   ReactionCollector,
 } from "discord.js";
-import { Op as SqlOp } from "sequelize/dist";
+import { Op as SqlOp } from "sequelize"
 
 import {
   GameFunctionState,
@@ -27,6 +27,7 @@ import {
   GetStdFunctionStateErrorMsg,
   isPortAvailable,
   MkdirIfNotExist,
+  //SystemHasScreen,
 } from "./core";
 import { GameTable, PlayerTable } from "./Sequelize";
 import { YamlListenerResult, YamlManager } from "./YamlManager";
@@ -69,7 +70,7 @@ export class GameManager {
   /** The current state of the game. */
   private _state = GameState.Ready;
   /** The snowflake for the server this game is running on. */
-  private _guildId?: string;
+  private _guildId: string | null = null;
   /** The snowflake for the channel this game is running on. */
   private _channelId?: string;
   /** The snowflake for the user hosting this game. */
@@ -835,17 +836,20 @@ export class GameManager {
     );
 
     const lastFiveLines: string[] = [];
-    const pyApServer = spawn(
-      PYTHON_PATH,
-      [
+    const pyApServer = await (async () => {
+      // TODO: what can I use to keep the server alive if the bot dies?
+      const process = /*(await SystemHasScreen()) ? "screen" :*/ PYTHON_PATH;
+      const params = [
         "MultiServer.py",
         "--port",
         port.toString(),
         "--use_embedded_options",
         pathResolve(pathJoin(gamePath, `${this._filename}.archipelago`)),
-      ],
-      { cwd: AP_PATH }
-    );
+      ];
+      if (process !== PYTHON_PATH)
+        params.unshift("-S", `apsrv-${port}`, PYTHON_PATH);
+      return spawn(process, params, { cwd: AP_PATH });
+    })();
     pyApServer.stderr.pipe(
       createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
     );

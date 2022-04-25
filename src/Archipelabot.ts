@@ -27,6 +27,7 @@ import {
   isPortAvailable,
   MkdirIfNotExist,
   QuickValidateYaml,
+  SystemHasScreen,
   YamlData,
 } from "./core";
 import { GameManager } from "./GameManager";
@@ -94,9 +95,7 @@ export class Archipelabot {
             type: ApplicationCommandOptionTypes.STRING,
             name: "subcommand",
             description: "What game command to run.",
-            choices: [
-              { name: "Start", value: "start" },
-            ],
+            choices: [{ name: "Start", value: "start" }],
             required: true,
           },
         ],
@@ -141,7 +140,9 @@ export class Archipelabot {
       },
     ];
 
-    if (ENABLE_TEST)
+    //console.debug("Test state:", ENABLE_TEST);
+    if (ENABLE_TEST === "1") {
+      console.info("Enabling test suite");
       this._cmds.push({
         name: "test",
         description: "Testing commands",
@@ -157,12 +158,19 @@ export class Archipelabot {
               { name: "Port detection", value: "port" },
               { name: "Long embeds/spoiler parsing", value: "spoiler" },
               { name: "Rebuild YAML table", value: "rebuildyaml" },
+              { name: "Check for 'screen'", value: "checkscreen" },
             ],
             required: true,
           },
         ],
         run: this.cmdTest,
       });
+    }
+
+    console.debug(
+      "Commands:",
+      this._cmds.map((i) => i.name)
+    );
 
     this._client.once("ready", () => {
       console.log(`${client.user?.username} is online`);
@@ -330,14 +338,16 @@ export class Archipelabot {
     this._client.on("interactionCreate", subInteractionHandler);
   }
 
-  cmdAPGame = async (interaction: BaseCommandInteraction, isTestGame = false) => {
+  cmdAPGame = async (
+    interaction: BaseCommandInteraction,
+    isTestGame = false
+  ) => {
     if (isTestGame && interaction.user.id !== "475120074621976587") {
       interaction.followUp({
         ephemeral: true,
         content: "You're not a bot admin!",
       });
-    }
-    else if (
+    } else if (
       !interaction.guild ||
       !interaction.channel ||
       !interaction.channel.isText()
@@ -572,7 +582,7 @@ export class Archipelabot {
       });
       return;
     }
-    
+
     switch (interaction.options.get("run", true).value as string) {
       case "sendfile":
         interaction.followUp({
@@ -656,7 +666,9 @@ export class Archipelabot {
             )
             .then(async (fileList) => {
               for (const [userId, files] of fileList) {
-                for (const file of files.filter(i => i.name.endsWith('.yaml'))) {
+                for (const file of files.filter((i) =>
+                  i.name.endsWith(".yaml")
+                )) {
                   const validate = await readFile(
                     pathJoin("yamls", userId, file.name)
                   ).then((data) => QuickValidateYaml(data.toString()));
@@ -665,21 +677,30 @@ export class Archipelabot {
                     await YamlTable.create({
                       code,
                       userId,
-                      playerName: validate.name ?? ['Who?'],
-                      description: validate.desc ?? 'No description',
-                      games: validate.games ?? ['A Link to the Past'],
-                      filename: basename(file.name, '.yaml')
-                    })
+                      playerName: validate.name ?? ["Who?"],
+                      description: validate.desc ?? "No description",
+                      games: validate.games ?? ["A Link to the Past"],
+                      filename: basename(file.name, ".yaml"),
+                    });
                     codes.push(code);
                   }
                 }
               }
             });
 
-          await PlayerTable.update({defaultCode: null}, {where: {}});
+          await PlayerTable.update({ defaultCode: null }, { where: {} });
 
-          interaction.followUp(`YAML table rebuilt with ${codes.length} YAMLs. All defaults reset.`);
+          interaction.followUp(
+            `YAML table rebuilt with ${codes.length} YAMLs. All defaults reset.`
+          );
         }
+        break;
+      case "checkscreen":
+        interaction.followUp(
+          `This system ${
+            (await SystemHasScreen()) ? "has" : "does not have"
+          } \`screen\` available to it.`
+        );
         break;
       default:
         interaction.followUp(

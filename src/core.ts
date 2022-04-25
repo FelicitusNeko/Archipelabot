@@ -92,16 +92,37 @@ export interface GameList {
  * @returns {GameList} The current list of games.
  */
 const GetGameList = (() => {
-  let gameList = {games:[]} as GameList;
+  let gameList = { games: [] } as GameList;
   let lastModified = new Date(0);
   return () => {
     const fileinfo = statSync("gamelist.json");
     if (fileinfo.mtime !== lastModified) {
-      gameList = JSON.parse(readFileSync("gamelist.json").toString()) as GameList;
+      gameList = JSON.parse(
+        readFileSync("gamelist.json").toString()
+      ) as GameList;
       lastModified = fileinfo.mtime;
     }
     return gameList;
-  }
+  };
+})();
+
+/**
+ * Returns whether the current operating system has the `screen` multiplexer available.
+ * @async
+ * @returns {boolean} Whether `screen` is available on this system.
+ */
+const SystemHasScreen = (() => {
+  let retval: boolean | null = null;
+  return async () => {
+    if (retval !== null) return Promise.resolve(retval);
+    if (process.platform !== "linux") return Promise.resolve((retval = false));
+    return new Promise<boolean>((f) => {
+      const which = spawn("which", ["screen"]);
+      which.on("close", (code) => {
+        f((retval = code === 0));
+      });
+    });
+  };
 })();
 
 /**
@@ -133,8 +154,8 @@ const GetFile = (url: string) => {
  * @param games List of games to evaolute against the Support games list.
  * @returns Whether every game in the given list is a Support game. `null` if there is a mix.
  */
- const ContainsSupportGames = (...games: string[]) => {
-  const {support} = GetGameList();
+const ContainsSupportGames = (...games: string[]) => {
+  const { support } = GetGameList();
   if (!support) return false;
 
   let allSupport: boolean | undefined = undefined;
@@ -143,9 +164,9 @@ const GetFile = (url: string) => {
     if (allSupport === undefined) allSupport = isSupport;
     else if (allSupport !== isSupport) return null;
   }
-  
+
   return allSupport;
-}
+};
 
 /**
  * Checks the game list to see whether a game is available to be played, or else why it is not available.
@@ -153,19 +174,30 @@ const GetFile = (url: string) => {
  * @returns An indicator of what stage the given game is in, or `GameFunctionState.Unknown` if it is not in the list.
  */
 const GetGameFunctionState = (game: string): GameFunctionState => {
-  for (const [category, list] of (Object.entries(GetGameList()) as [string, string[]][])) {
-    if (list.includes(game)) switch(category) {
-      case "games": return GameFunctionState.Playable;
-      case "testgames": return GameFunctionState.Testing;
-      case "broken": return GameFunctionState.Broken;
-      case "upcoming": return GameFunctionState.Upcoming;
-      case "support": return GameFunctionState.Support;
-      case "excluded": return GameFunctionState.Excluded;
-      default: return GameFunctionState.Unknown;
-    }
+  for (const [category, list] of Object.entries(GetGameList()) as [
+    string,
+    string[]
+  ][]) {
+    if (list.includes(game))
+      switch (category) {
+        case "games":
+          return GameFunctionState.Playable;
+        case "testgames":
+          return GameFunctionState.Testing;
+        case "broken":
+          return GameFunctionState.Broken;
+        case "upcoming":
+          return GameFunctionState.Upcoming;
+        case "support":
+          return GameFunctionState.Support;
+        case "excluded":
+          return GameFunctionState.Excluded;
+        default:
+          return GameFunctionState.Unknown;
+      }
   }
   return GameFunctionState.Unknown;
-}
+};
 
 /**
  * Runs a quick sanity check on the given YAML data.
@@ -228,7 +260,7 @@ const QuickValidateYaml = (data: string) => {
 
     if (ContainsSupportGames(...retval.games) === null)
       throw new Error(`Cannot mix Support games with others`);
-    
+
     retval.worstState = YamlManager.GetWorstStatus(retval.games);
     if (retval.worstState >= GameFunctionState.Excluded)
       throw new Error(`Invalid game found in this YAML`);
@@ -315,7 +347,10 @@ const GenerateLetterCode = (
   return retval;
 };
 
-const GetStdFunctionStateErrorMsg = (reason: GameFunctionState, cannotBeUsed: string) => {
+const GetStdFunctionStateErrorMsg = (
+  reason: GameFunctionState,
+  cannotBeUsed: string
+) => {
   switch (reason) {
     case GameFunctionState.Playable:
       return `This YAML is valid to be used ${cannotBeUsed}.`;
@@ -332,14 +367,15 @@ const GetStdFunctionStateErrorMsg = (reason: GameFunctionState, cannotBeUsed: st
     case GameFunctionState.Unknown:
       return `This YAML contains games in an unknown state, and cannot be used ${cannotBeUsed}.`;
   }
-}
+};
 export {
+  SystemHasScreen,
   MkdirIfNotExist,
   GetFile,
+  ContainsSupportGames,
   GetGameFunctionState,
   QuickValidateYaml,
   isPortAvailable,
   GenerateLetterCode,
   GetStdFunctionStateErrorMsg,
-  ContainsSupportGames
 };
