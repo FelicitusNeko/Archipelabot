@@ -17,7 +17,7 @@ import {
   MessageSelectOptionData,
   User as DiscordUser,
 } from "discord.js";
-import { Op as SqlOp } from "sequelize/dist";
+import { Op as SqlOp } from "sequelize";
 
 import {
   GetFile,
