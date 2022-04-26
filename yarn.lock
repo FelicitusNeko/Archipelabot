@@ -672,6 +672,7 @@ __metadata:
     discord.js: ^13.6.0
     dotenv: ^16.0.0
     eslint: ^8.14.0
+    mkfifo: ^2.1.0
     prettier: ^2.6.2
     sequelize: ^6.19.0
     sqlite3: ^5.0.2
@@ -2354,6 +2355,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"mkfifo@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "mkfifo@npm:2.1.0"
+  dependencies:
+    node-addon-api: ^1.6.3
+    node-gyp: latest
+  checksum: 49074ed154e088ea06bd1e1628f2dffe867af34f0594669669d4e6754b5d271e9c0859fac09ae4c065a7c58ffdaa0cbe904923cf7945cba00bc2ff147aba97ae
+  conditions: (os=linux | os=freebsd | os=darwin)
+  languageName: node
+  linkType: hard
+
 "moment-timezone@npm:^0.5.34":
   version: 0.5.34
   resolution: "moment-timezone@npm:0.5.34"
@@ -2415,6 +2427,15 @@ __metadata:
   version: 0.6.2
   resolution: "negotiator@npm:0.6.2"
   checksum: dfddaff6c06792f1c4c3809e29a427b8daef8cd437c83b08dd51d7ee11bbd1c29d9512d66b801144d6c98e910ffd8723f2432e0cbf8b18d41d2a09599c975ab3
+  languageName: node
+  linkType: hard
+
+"node-addon-api@npm:^1.6.3":
+  version: 1.7.2
+  resolution: "node-addon-api@npm:1.7.2"
+  dependencies:
+    node-gyp: latest
+  checksum: 938922b3d7cb34ee137c5ec39df6289a3965e8cab9061c6848863324c21a778a81ae3bc955554c56b6b86962f6ccab2043dd5fa3f33deab633636bd28039333f
   languageName: node
   linkType: hard
 
