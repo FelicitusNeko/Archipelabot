@@ -211,6 +211,7 @@ export class Archipelabot {
 
     MkdirIfNotExist("./yamls");
     MkdirIfNotExist("./games");
+    MkdirIfNotExist("./pipes");
 
     this._client.login((botConf as BotConf).discord.token);
   }

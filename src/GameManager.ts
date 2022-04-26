@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { createWriteStream } from "fs";
+import { createReadStream, createWriteStream, unlinkSync } from "fs";
 import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
 import { basename, join as pathJoin, resolve as pathResolve } from "path";
 
@@ -18,7 +18,8 @@ import {
   MessageSelectMenu,
   ReactionCollector,
 } from "discord.js";
-import { Op as SqlOp } from "sequelize"
+import { Op as SqlOp } from "sequelize";
+import { mkfifoSync } from "mkfifo";
 
 import {
   GameFunctionState,
@@ -27,6 +28,7 @@ import {
   GetStdFunctionStateErrorMsg,
   isPortAvailable,
   MkdirIfNotExist,
+  SystemHasMkfifo,
   //SystemHasScreen,
 } from "./core";
 import { GameTable, PlayerTable } from "./Sequelize";
@@ -836,9 +838,9 @@ export class GameManager {
     );
 
     const lastFiveLines: string[] = [];
-    const pyApServer = await (async () => {
-      // TODO: what can I use to keep the server alive if the bot dies?
-      const process = /*(await SystemHasScreen()) ? "screen" :*/ PYTHON_PATH;
+    const [pyApServer, apOut, apIn, apErr] = await (async () => {
+      const hasMkfifo = await SystemHasMkfifo();
+      const pathprefix = pathJoin(gamePath, `${this.code}-std`);
       const params = [
         "MultiServer.py",
         "--port",
@@ -846,13 +848,31 @@ export class GameManager {
         "--use_embedded_options",
         pathResolve(pathJoin(gamePath, `${this._filename}.archipelago`)),
       ];
-      if (process !== PYTHON_PATH)
-        params.unshift("-S", `apsrv-${port}`, PYTHON_PATH);
-      return spawn(process, params, { cwd: AP_PATH });
+
+      if (hasMkfifo) {
+        for (const pipe of ["in", "out", "err"])
+          mkfifoSync(pathprefix + pipe, 0o600);
+        params.unshift(`<${pathprefix}in`, `>${pathprefix}out`, `2>${pathprefix}err`);
+      }
+      const pyApServer = spawn(PYTHON_PATH, params, { cwd: AP_PATH });
+
+      if (hasMkfifo) return [
+        pyApServer,
+        createReadStream(pathprefix + "out"),
+        createWriteStream(pathprefix + "in"),
+        createReadStream(pathprefix + "err")
+      ]
+      else return [
+        pyApServer,
+        pyApServer.stdout,
+        pyApServer.stdin,
+        pyApServer.stderr,
+      ];
     })();
-    pyApServer.stderr.pipe(
+    apErr.pipe(
       createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
     );
+    
 
     let lastUpdate = Date.now();
     let timeout: NodeJS.Timeout | undefined;
@@ -866,7 +886,7 @@ export class GameManager {
       timeout = undefined;
     };
 
-    pyApServer.stdout.on("data", (data: Buffer) => {
+    apOut.on("data", (data: Buffer) => {
       logout.write(data);
       lastFiveLines.push(...data.toString().trim().split(/\n/));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
@@ -877,21 +897,24 @@ export class GameManager {
         else UpdateOutput();
       }
       if (data.toString().includes("press enter to install it"))
-        pyApServer.stdin.write("\n");
+        apIn.write("\n");
     });
-    pyApServer.stdout.on("close", logout.close);
+    apOut.on("close", logout.close);
 
-    pyApServer.on("close", (pcode) => {
+    pyApServer?.on("close", (pcode) => {
       if (timeout) clearTimeout(timeout);
       msg.edit({
         content: `Server for game ${this._code} closed ${
-          pcode === 0 ? "normally" : ` with error code ${pcode}`
+          pcode === 0 ? "normally" : `with error code ${pcode}`
         }.`,
         embeds: [],
       });
       GameTable.update({ active: false }, { where: { code: this._code } });
       msgCollector.stop("serverclose");
       this._state = GameState.Stopped;
+      
+      const pathprefix = pathJoin(gamePath, `${this.code}-std`);
+      for (const pipe of ["in", "out", "err"]) unlinkSync(pathprefix + pipe);
     });
 
     const msgCollector = channel.createMessageCollector({
@@ -901,7 +924,7 @@ export class GameManager {
         msgIn.author.id === this._hostId,
     });
     msgCollector.on("collect", (msgIn) => {
-      pyApServer.stdin.write(msgIn.content.replace(/^\./, "/") + "\n");
+      apIn.write(msgIn.content.replace(/^\./, "/") + "\n");
       lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
 

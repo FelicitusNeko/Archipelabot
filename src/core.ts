@@ -107,23 +107,38 @@ const GetGameList = (() => {
 })();
 
 /**
- * Returns whether the current operating system has the `screen` multiplexer available.
+ * Returns whether the current operating system has the given application available.
  * @async
- * @returns {boolean} Whether `screen` is available on this system.
+ * @param pgm The program to check for.
+ * @returns {boolean} Whether that program is available on this system.
  */
-const SystemHasScreen = (() => {
+ const SystemHas = (() => {
   let retval: boolean | null = null;
-  return async () => {
+  return async (pgm: string) => {
     if (retval !== null) return Promise.resolve(retval);
     if (process.platform !== "linux") return Promise.resolve((retval = false));
     return new Promise<boolean>((f) => {
-      const which = spawn("which", ["screen"]);
+      const which = spawn("which", [pgm]);
       which.on("close", (code) => {
         f((retval = code === 0));
       });
     });
   };
 })();
+
+/**
+ * Returns whether the current operating system has the `screen` multiplexer available.
+ * @async
+ * @returns {Promise<boolean>} Whether `screen` is available on this system.
+ */
+const SystemHasScreen = (): Promise<boolean> => SystemHas('screen');
+
+/**
+ * Returns whether the current operating system has the `mkfifo` tool available.
+ * @async
+ * @returns {boolean} Whether `mkfifo` is available on this system.
+ */
+const SystemHasMkfifo = (): Promise<boolean> => SystemHas('mkfifo');
 
 /**
  * Creates a file system path, if it does not already exist.
@@ -370,6 +385,7 @@ const GetStdFunctionStateErrorMsg = (
 };
 export {
   SystemHasScreen,
+  SystemHasMkfifo,
   MkdirIfNotExist,
   GetFile,
   ContainsSupportGames,
