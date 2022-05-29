@@ -1,5 +1,10 @@
-import { spawn } from "child_process";
-import { createReadStream, createWriteStream, unlinkSync } from "fs";
+import { spawn, StdioOptions } from "child_process";
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  unlinkSync,
+} from "fs";
 import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
 import { basename, join as pathJoin, resolve as pathResolve } from "path";
 
@@ -838,8 +843,8 @@ export class GameManager {
     );
 
     const lastFiveLines: string[] = [];
-    const [pyApServer, apOut, apIn, apErr] = await (async () => {
-      const hasMkfifo = await SystemHasMkfifo();
+    const [pyApServer, apIn, apOut, apErr] = await (async () => {
+      const hasMkfifo = (await SystemHasMkfifo()); //&& false;
       const pathprefix = pathJoin(gamePath, `${this.code}-std`);
       const params = [
         "MultiServer.py",
@@ -849,30 +854,41 @@ export class GameManager {
         pathResolve(pathJoin(gamePath, `${this._filename}.archipelago`)),
       ];
 
+      let stdio: StdioOptions | undefined = undefined;
       if (hasMkfifo) {
         for (const pipe of ["in", "out", "err"])
           mkfifoSync(pathprefix + pipe, 0o600);
-        params.unshift(`<${pathprefix}in`, `>${pathprefix}out`, `2>${pathprefix}err`);
+        stdio = [
+          createReadStream(pathprefix + "in"),
+          createWriteStream(pathprefix + "out"),
+          createWriteStream(pathprefix + "out"),
+        ];
+        params.unshift(
+          `<${pathprefix}in`,
+          `>${pathprefix}out`,
+          `2>${pathprefix}err`
+        );
       }
-      const pyApServer = spawn(PYTHON_PATH, params, { cwd: AP_PATH });
+      const pyApServer = spawn(PYTHON_PATH, params, { cwd: AP_PATH, stdio });
 
-      if (hasMkfifo) return [
-        pyApServer,
-        createReadStream(pathprefix + "out"),
-        createWriteStream(pathprefix + "in"),
-        createReadStream(pathprefix + "err")
-      ]
-      else return [
-        pyApServer,
-        pyApServer.stdout,
-        pyApServer.stdin,
-        pyApServer.stderr,
-      ];
+      if (hasMkfifo)
+        return [
+          pyApServer,
+          createWriteStream(pathprefix + "in"),
+          createReadStream(pathprefix + "out"),
+          createReadStream(pathprefix + "err"),
+        ];
+      else
+        return [
+          pyApServer,
+          pyApServer.stdin,
+          pyApServer.stdout,
+          pyApServer.stderr,
+        ];
     })();
-    apErr.pipe(
+    apErr?.pipe(
       createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
     );
-    
 
     let lastUpdate = Date.now();
     let timeout: NodeJS.Timeout | undefined;
@@ -886,7 +902,7 @@ export class GameManager {
       timeout = undefined;
     };
 
-    apOut.on("data", (data: Buffer) => {
+    apOut?.on("data", (data: Buffer) => {
       logout.write(data);
       lastFiveLines.push(...data.toString().trim().split(/\n/));
       while (lastFiveLines.length > 5) lastFiveLines.shift();
@@ -897,9 +913,9 @@ export class GameManager {
         else UpdateOutput();
       }
       if (data.toString().includes("press enter to install it"))
-        apIn.write("\n");
+        apIn?.write("\n");
     });
-    apOut.on("close", logout.close);
+    apOut?.on("close", logout.close);
 
     pyApServer?.on("close", (pcode) => {
       if (timeout) clearTimeout(timeout);
@@ -912,9 +928,10 @@ export class GameManager {
       GameTable.update({ active: false }, { where: { code: this._code } });
       msgCollector.stop("serverclose");
       this._state = GameState.Stopped;
-      
+
       const pathprefix = pathJoin(gamePath, `${this.code}-std`);
-      for (const pipe of ["in", "out", "err"]) unlinkSync(pathprefix + pipe);
+      for (const pipe of ["in", "out", "err"])
+        if (existsSync(pathprefix + pipe)) unlinkSync(pathprefix + pipe);
     });
 
     const msgCollector = channel.createMessageCollector({
@@ -924,12 +941,14 @@ export class GameManager {
         msgIn.author.id === this._hostId,
     });
     msgCollector.on("collect", (msgIn) => {
-      apIn.write(msgIn.content.replace(/^\./, "/") + "\n");
-      lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
-      while (lastFiveLines.length > 5) lastFiveLines.shift();
-
-      if (msgIn.deletable) msgIn.delete();
-      else msgIn.react("⌨️");
+      if (apIn) {
+        apIn?.write(msgIn.content.replace(/^\./, "/") + "\n");
+        lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
+        while (lastFiveLines.length > 5) lastFiveLines.shift();
+  
+        if (msgIn.deletable) msgIn.delete();
+        else msgIn.react("⌨️");
+      } else msgIn.react("❌");
     });
   }
 
@@ -964,7 +983,6 @@ export class GameManager {
   }
 
   static async CleanupGames(interaction?: BaseCommandInteraction) {
-    // TODO: doesn't seem to be purging anything
     // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
     /** A Unix millisecond timestamp corresponding to two weeks before the current time. */
     const twoWeeksAgo = Date.now() - 1_209_600_000;
@@ -977,7 +995,7 @@ export class GameManager {
       const gameCodes = gameRows.map((i) => i.code);
       return new Set([
         ...gameRows
-          .filter((i) => i.active && i.updatedAt.getTime() < twoWeeksAgo)
+          .filter((i) => !i.active && i.updatedAt.getTime() < twoWeeksAgo)
           .map((i) => i.code),
         ...gameDirs
           .filter((i) => i.isDirectory() && !gameCodes.includes(i.name))
