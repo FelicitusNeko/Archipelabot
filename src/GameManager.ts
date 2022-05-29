@@ -844,7 +844,7 @@ export class GameManager {
 
     const lastFiveLines: string[] = [];
     const [pyApServer, apIn, apOut, apErr] = await (async () => {
-      const hasMkfifo = (await SystemHasMkfifo()); //&& false;
+      const hasMkfifo = (await SystemHasMkfifo()) && false;
       const pathprefix = pathJoin(gamePath, `${this.code}-std`);
       const params = [
         "MultiServer.py",
@@ -863,11 +863,11 @@ export class GameManager {
           createWriteStream(pathprefix + "out"),
           createWriteStream(pathprefix + "out"),
         ];
-        params.unshift(
-          `<${pathprefix}in`,
-          `>${pathprefix}out`,
-          `2>${pathprefix}err`
-        );
+        // params.unshift(
+        //   `<${pathprefix}in`,
+        //   `>${pathprefix}out`,
+        //   `2>${pathprefix}err`
+        // );
       }
       const pyApServer = spawn(PYTHON_PATH, params, { cwd: AP_PATH, stdio });
 
