@@ -2,20 +2,25 @@ import { readdirSync } from "fs";
 import { readdir, unlink, writeFile } from "fs/promises";
 import { basename, join as pathJoin, sep as pathSep } from "path";
 
-import { userMention } from "@discordjs/builders";
+//import { userMention } from "@discordjs/builders";
 import {
-  BaseCommandInteraction,
+  User as DiscordUser,
   Client as DiscordClient,
   Interaction as DiscordInteraction,
-  InteractionUpdateOptions,
   Message as DiscordMessage,
-  MessageActionRow,
-  MessageButton,
-  MessageEmbed,
-  MessageOptions,
-  MessageSelectMenu,
-  MessageSelectOptionData,
-  User as DiscordUser,
+  CommandInteraction,
+
+  ActionRowBuilder,
+  ButtonBuilder,
+  EmbedBuilder,
+  SelectMenuBuilder,
+  SelectMenuOptionBuilder,
+
+  InteractionUpdateOptions,
+  ButtonStyle,
+  MessageType,
+
+  userMention,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
 
@@ -103,9 +108,9 @@ export class YamlManager {
       if (!curEntry) return [];
       else
         return [
-          new MessageEmbed({
+          new EmbedBuilder({
             title: curEntry.description ?? "Unknown",
-            footer: userMention(calledUser ?? curEntry.userId),
+            footer: {text: userMention(calledUser ?? curEntry.userId)},
             fields: [
               {
                 name: "Games",
@@ -123,41 +128,37 @@ export class YamlManager {
     };
 
     /** A component row containing a YAML dropdown box. */
-    const yamlRow = new MessageActionRow({
-      components: [
-        new MessageSelectMenu({
-          customId: "yaml",
-          placeholder: "Select a YAML",
-          options: await this.GetYamlOptionsV3([]),
-        }),
-      ],
-    });
+    const yamlRow = new ActionRowBuilder().addComponents(
+      new SelectMenuBuilder({
+        customId: "yaml",
+        placeholder: "Select a YAML",
+        options: (await this.GetYamlOptionsV3([])).map(i => i.toJSON()),
+      }),
+    );
     /** A component row containing buttons to manage individual YAMLs. */
-    const buttonRow = new MessageActionRow({
-      components: [
-        new MessageButton({
-          customId: "backToYamlList",
-          label: "Back",
-          style: "SECONDARY",
-        }),
-        new MessageButton({
-          customId: "setDefaultYaml",
-          label: "Set Default",
-          style: "PRIMARY",
-        }),
-        new MessageButton({
-          customId: "deleteYaml",
-          label: "Delete",
-          style: "DANGER",
-        }),
-      ],
-    });
+    const buttonRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder({
+        customId: "backToYamlList",
+        label: "Back",
+        style: ButtonStyle.Secondary,
+      }),
+      new ButtonBuilder({
+        customId: "setDefaultYaml",
+        label: "Set Default",
+        style: ButtonStyle.Primary,
+      }),
+      new ButtonBuilder({
+        customId: "deleteYaml",
+        label: "Delete",
+        style: ButtonStyle.Danger,
+      }),
+    );
     /** The default starting state of the YAML manager. */
-    const startingState: MessageOptions = {
+    const startingState = {
       content:
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       embeds: [],
-      components: [yamlRow],
+      //components: [yamlRow], // TODO: figure out what it wants from me here too
     };
 
     /** The message that will be controlled to represent the YAML management interface. */
@@ -184,9 +185,9 @@ export class YamlManager {
           } else {
             const playerEntry = await PlayerTable.findByPk(this.userId);
             const worstState = YamlManager.GetWorstStatus(curEntry.games);
-            (buttonRow.components[1] as MessageButton).disabled =
+            (buttonRow.components[1] as ButtonBuilder).setDisabled(
               worstState > GameFunctionState.Playable ||
-              playerEntry?.defaultCode === curEntry.code;
+              playerEntry?.defaultCode === curEntry.code);
             subInt.update({
               content:
                 "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
@@ -213,8 +214,8 @@ export class YamlManager {
                   }
                 );
 
-                (buttonRow.components[1] as MessageButton).disabled = true;
-                (yamlRow.components[0] as MessageSelectMenu).setOptions(
+                (buttonRow.components[1] as ButtonBuilder).setDisabled(true);
+                (yamlRow.components[0] as SelectMenuBuilder).setOptions(
                   await this.GetYamlOptionsV3([])
                 );
                 subInt.update({
@@ -235,20 +236,18 @@ export class YamlManager {
             subInt.update({
               content: "Are you sure you wish to delete this YAML?",
               components: [
-                new MessageActionRow({
-                  components: [
-                    new MessageButton({
-                      customId: "deleteYamlYes",
-                      label: "Yes",
-                      style: "DANGER",
-                    }),
-                    new MessageButton({
-                      customId: "deleteYamlNo",
-                      label: "No",
-                      style: "SECONDARY",
-                    }),
-                  ],
-                }),
+                new ActionRowBuilder().addComponents(
+                  new ButtonBuilder({
+                    customId: "deleteYamlYes",
+                    label: "Yes",
+                    style: ButtonStyle.Danger,
+                  }),
+                  new ButtonBuilder({
+                    customId: "deleteYamlNo",
+                    label: "No",
+                    style: ButtonStyle.Secondary,
+                  }),
+                ),
               ],
             });
             break;
@@ -266,7 +265,7 @@ export class YamlManager {
               ),
             ]);
 
-            (yamlRow.components[0] as MessageSelectMenu).setOptions(
+            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             curEntry = null;
@@ -326,7 +325,7 @@ export class YamlManager {
           if (curEntry) {
             await this.UpdateYaml(curEntry.code, retval[0]);
             curEntry = await YamlTable.findByPk(curEntry.code);
-            (yamlRow.components[0] as MessageSelectMenu).setOptions(
+            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             msg.edit({
@@ -335,7 +334,7 @@ export class YamlManager {
             });
           } else {
             await this.AddYamls(...retval);
-            (yamlRow.components[0] as MessageSelectMenu).setOptions(
+            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             msg.edit({
@@ -449,12 +448,12 @@ export class YamlManager {
   /**
    * Retrieves a list of the managed player's YAML options, to be used in a Discord drop-down box.
    * @async
-   * @param maximumState Optional. The maximum worst function state to return YAMLs for. Defaults to {@link GameFunctionState.Playable}.
-   * @returns {Promise<MessageSelectOptionData[]>} A promise that resolves into the list of available YAMLs, in {@link MessageSelectOptionData} form.
+   * @param validStates Optional. Determines which game states are pulled from the list. Defaults to {@link GameFunctionState.Playable}.
+   * @returns {Promise<SelectMenuOptionBuilder[]>} A promise that resolves into the list of available YAMLs, in {@link SelectMenuOptionBuilder} form.
    */
   public async GetYamlOptionsV3(
     validStates: GameFunctionState[] = [GameFunctionState.Playable]
-  ): Promise<MessageSelectOptionData[]> {
+  ): Promise<SelectMenuOptionBuilder[]> {
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
       (await PlayerTable.create({ userId: this.userId, defaultCode: null }));
@@ -474,7 +473,7 @@ export class YamlManager {
           );
           let games = i.games.join(", ");
           if (games.length > 100) games = games.substring(0, 97) + "…";
-          return {
+          return new SelectMenuOptionBuilder({
             label:
               i.description && i.description.length > 0
                 ? i.description
@@ -482,16 +481,16 @@ export class YamlManager {
             description: games,
             value: i.code,
             emoji,
-          } as MessageSelectOptionData;
+          });
         })
     );
 
     return retval.length === 0
       ? [
-          {
+          new SelectMenuOptionBuilder({
             label: "No YAMLs",
             value: "noyaml",
-          },
+          }),
         ]
       : retval;
   }
@@ -510,7 +509,7 @@ export class YamlManager {
   ): Promise<YamlListenerReturn> {
     const msgCollector = msg.channel.createMessageCollector({
       filter: (msgIn) =>
-        msgIn.type === "REPLY" &&
+        msgIn.type === MessageType.Reply &&
         msgIn.reference?.messageId === msg.id &&
         msgIn.attachments.size > 0,
       time,
@@ -588,7 +587,7 @@ export class YamlManager {
    * @async
    * @param interaction Optional. The interaction which called this function to be used.
    */
-  static async CleanupYamls(interaction?: BaseCommandInteraction) {
+  static async CleanupYamls(interaction?: CommandInteraction) {
     const [yamlDb, yamlFiles] = await Promise.all([
       YamlTable.findAll().then((i) =>
         i.map((ii) => pathJoin("yamls", ii.userId, `${ii.filename}.yaml`))
