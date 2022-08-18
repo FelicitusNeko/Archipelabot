@@ -302,10 +302,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:^16.11.10":
+"@types/node@npm:*":
   version: 16.11.10
   resolution: "@types/node@npm:16.11.10"
   checksum: 9c79419c5c3d92d5825bffa30f3668533f598d8b63a73ea7fc24e47f162bdbed92b0f8e4f4261cc3314b39cee050e303366d2aa154abc95c63a572a110b8c160
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:^18":
+  version: 18.7.6
+  resolution: "@types/node@npm:18.7.6"
+  checksum: 5122988c325eda8d1f5cbe4494916036aae1758f9d5bb2d8139a800b8bad1540fbb167cd3c759da9a5cb4600cd3507609ac7969747113c1549a3e4320a17b1a9
   languageName: node
   linkType: hard
 
@@ -690,7 +697,7 @@ __metadata:
   dependencies:
     "@types/adm-zip": ^0
     "@types/eslint": ^8
-    "@types/node": ^16.11.10
+    "@types/node": ^18
     "@types/prettier": ^2
     "@types/sqlite3": ^3.1.7
     "@types/validator": ^13.7.0
