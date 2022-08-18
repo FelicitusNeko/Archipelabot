@@ -8,20 +8,23 @@ import {
 import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
 import { basename, join as pathJoin, resolve as pathResolve } from "path";
 
-import { userMention } from "@discordjs/builders";
 import AdmZip = require("adm-zip");
 import {
-  BaseCommandInteraction,
   Client as DiscordClient,
   Interaction as DiscordInteraction,
   Message as DiscordMessage,
-  MessageActionRow,
-  MessageAttachment,
-  MessageButton,
-  MessageEditOptions,
-  MessageEmbed,
-  MessageSelectMenu,
+  CommandInteraction,
   ReactionCollector,
+  ActionRowBuilder,
+  AttachmentBuilder,
+  ButtonBuilder,
+  EmbedBuilder,
+  SelectMenuBuilder,
+  MessageEditOptions,
+  ButtonStyle,
+  ChannelType,
+  MessageType,
+  userMention,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
 import { mkfifoSync } from "mkfifo";
@@ -154,18 +157,18 @@ export class GameManager {
     }
   }
 
-  async RecruitGame(interaction: BaseCommandInteraction) {
+  async RecruitGame(interaction: CommandInteraction) {
     if (this._filename) throw new Error("Game has already been generated");
 
     this._guildId = interaction.guildId;
     this._channelId = interaction.channelId;
     this._hostId = interaction.user.id;
-    this._msg = (await interaction.followUp({
+    this._msg = await interaction.followUp({
       content: `${userMention(this._hostId)} is starting a ${
         this._testGame ? "testing " : ""
       }game!`,
       embeds: [
-        new MessageEmbed({
+        new EmbedBuilder({
           title: this._testGame ? "Testing Game Call" : "Multiworld Game Call",
           description:
             (this._testGame
@@ -180,7 +183,7 @@ export class GameManager {
           },
         }),
       ],
-    })) as DiscordMessage;
+    });
 
     this._reactCollector = this._msg.createReactionCollector({
       filter: (reaction, user) =>
@@ -247,7 +250,7 @@ export class GameManager {
     this._state = GameState.Assembling;
   }
 
-  CancelGame(interaction: BaseCommandInteraction) {
+  CancelGame(interaction: CommandInteraction) {
     if (this._hostId !== interaction.user.id) {
       interaction.followUp("You're not the person who launched this event!");
       return false;
@@ -265,7 +268,7 @@ export class GameManager {
    * Creates a new game.
    * @param interaction The interaction leading to the creation of a new game.
    */
-  async CreateGame(interaction: BaseCommandInteraction) {
+  async CreateGame(interaction: CommandInteraction) {
     const { joinDefault, joinSelect, joinSupport } = this._players;
     this._reactCollector?.stop("aplaunch");
     this._reactCollector = undefined;
@@ -300,21 +303,19 @@ export class GameManager {
     // TODO: Request YAMLs from players whose default YAML has an invalid game in it
 
     if (yamlRequests.size + joinSupport.size === 0) {
-      this._msg = (await interaction.followUp(
-        "Now generating the game..."
-      )) as DiscordMessage;
+      this._msg = await interaction.followUp("Now generating the game...");
       this.LaunchGame(...defaultYamls);
     } else {
       const requestingUsers = new Set([...yamlRequests, ...joinSupport]);
       this._state = GameState.GatheringYAMLs;
 
-      this._msg = (await interaction.followUp(
+      this._msg = await interaction.followUp(
         "The following player(s) need to provide a YAML before the game can begin. " +
           `The game will start <t:${
             Math.floor(Date.now() / 1000) + 30 * 60
           }:R> if not everyone has responded.\n` +
           [...requestingUsers].map((i) => userMention(i)).join(", ")
-      )) as DiscordMessage;
+      );
 
       const { _msg } = this;
 
@@ -409,26 +410,24 @@ export class GameManager {
         baseRequestMsg +
         ` If you've changed your mind, you can click on "Withdraw". This message will time out <t:${timeout}:R>.`,
       components: [
-        new MessageActionRow({
-          components: [
-            new MessageSelectMenu({
-              customId: "selectYaml",
-              placeholder: "Select a YAML",
-              options: await yamlMgr.GetYamlOptionsV3(states),
-            }),
-          ],
-        }),
-        new MessageActionRow({
-          components: [
-            new MessageButton({
-              customId: "withdraw",
-              label: "Withdraw from this game",
-              style: "DANGER",
-            }),
-          ],
-        }),
+        new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+          new SelectMenuBuilder({
+            customId: "selectYaml",
+            placeholder: "Select a YAML",
+            options: (
+              await yamlMgr.GetYamlOptionsV3(states)
+            ).map((i) => i.toJSON()),
+          })
+        ),
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder({
+            customId: "withdraw",
+            label: "Withdraw from this game",
+            style: ButtonStyle.Danger,
+          })
+        ),
       ],
-    })) as DiscordMessage;
+    }));
 
     return (async (): Promise<[string, string | null]> => {
       let retval: string | null = null;
@@ -708,7 +707,7 @@ export class GameManager {
               )
                 playerListing.push(match);
             }
-            return new MessageAttachment(spoilerData)
+            return new AttachmentBuilder(spoilerData)
               .setName(i.name)
               .setSpoiler(true);
           });
@@ -721,7 +720,7 @@ export class GameManager {
           embeds:
             playerListing.length > 0
               ? [
-                  new MessageEmbed({
+                  new EmbedBuilder({
                     title: "Who's Playing What",
                     description:
                       playerListing.length === 1
@@ -774,7 +773,9 @@ export class GameManager {
         writeMsg({
           content: "An error occurred during game generation.",
           files: [
-            new MessageAttachment((e as Error).message, "Generation Error.txt"),
+            new AttachmentBuilder((e as Error).message, {
+              name: "Generation Error.txt",
+            }),
           ],
         });
         this._state = GameState.GenerationFailed;
@@ -793,7 +794,8 @@ export class GameManager {
 
     const channel = this._client.channels.cache.get(this._channelId);
     if (!channel) throw new Error("Cannot find channel");
-    if (!channel.isText()) throw new Error("Channel is not text channel");
+    if (channel.type !== ChannelType.GuildText)
+      throw new Error("Channel is not text channel");
 
     if (this._state > GameState.Ready) {
       channel.send(`Game ${this._code} is already running.`);
@@ -808,7 +810,7 @@ export class GameManager {
       return port;
     })();
 
-    const liveEmbed = new MessageEmbed({
+    const liveEmbed = new EmbedBuilder({
       title: "Archipelago Server",
       fields: [
         {
@@ -861,7 +863,7 @@ export class GameManager {
         stdio = [
           createReadStream(pathprefix + "in"),
           createWriteStream(pathprefix + "out"),
-          createWriteStream(pathprefix + "out"),
+          createWriteStream(pathprefix + "err"),
         ];
         // params.unshift(
         //   `<${pathprefix}in`,
@@ -895,7 +897,13 @@ export class GameManager {
 
     const UpdateOutput = () => {
       lastUpdate = Date.now();
-      liveEmbed.fields[0].value = lastFiveLines.join("\n");
+      const curFields = liveEmbed.data.fields ?? [
+        { name: "Server output", value: "" },
+      ];
+      curFields[0].value = lastFiveLines.join("\n");
+      if (curFields[0].value.length > 1024)
+        curFields[0].value = curFields[0].value.substring(0, 1021) + "…";
+      liveEmbed.setFields(curFields);
       msg.edit({
         embeds: [liveEmbed],
       });
@@ -917,7 +925,7 @@ export class GameManager {
     });
     apOut?.on("close", logout.close);
 
-    pyApServer?.on("close", (pcode) => {
+    pyApServer.on("close", (pcode) => {
       if (timeout) clearTimeout(timeout);
       msg.edit({
         content: `Server for game ${this._code} closed ${
@@ -936,7 +944,7 @@ export class GameManager {
 
     const msgCollector = channel.createMessageCollector({
       filter: (msgIn) =>
-        msgIn.type === "REPLY" &&
+        msgIn.type === MessageType.Reply &&
         msgIn.reference?.messageId === msg.id &&
         msgIn.author.id === this._hostId,
     });
@@ -945,7 +953,7 @@ export class GameManager {
         apIn?.write(msgIn.content.replace(/^\./, "/") + "\n");
         lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
         while (lastFiveLines.length > 5) lastFiveLines.shift();
-  
+
         if (msgIn.deletable) msgIn.delete();
         else msgIn.react("⌨️");
       } else msgIn.react("❌");
@@ -982,7 +990,7 @@ export class GameManager {
     });
   }
 
-  static async CleanupGames(interaction?: BaseCommandInteraction) {
+  static async CleanupGames(interaction?: CommandInteraction) {
     // 1000 msec * 60 sec * 60 min * 24 hr * 14 d = 1,209,600,000
     /** A Unix millisecond timestamp corresponding to two weeks before the current time. */
     const twoWeeksAgo = Date.now() - 1_209_600_000;

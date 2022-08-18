@@ -1,20 +1,26 @@
 import {
   Client as DiscordClient,
-  Message as DiscordMessage,
+  // Message as DiscordMessage,
   Interaction as DiscordInteraction,
   User as DiscordUser,
-  BaseCommandInteraction,
-  MessageActionRow,
-  MessageButton,
-  MessageEmbed,
-  MessageAttachment,
+  CommandInteraction,
+  ActionRowBuilder,
+  ButtonBuilder,
+  EmbedBuilder,
+  AttachmentBuilder,
+  ApplicationCommandType,
+  ApplicationCommandOptionType,
+  InteractionType,
+  MessageType,
+  ChannelType,
+  ButtonStyle,
+  userMention,
 } from "discord.js";
-import { ApplicationCommandOptionTypes } from "discord.js/typings/enums";
-import { userMention } from "@discordjs/builders";
 import * as AdmZip from "adm-zip";
 
-import { basename, join as pathJoin } from "path";
+import { Dirent } from "fs";
 import { readdir, readFile, writeFile } from "fs/promises";
+import { basename, join as pathJoin } from "path";
 
 import { PlayerTable, YamlTable } from "./Sequelize";
 import { BotConf } from "./defs";
@@ -32,7 +38,6 @@ import {
 } from "./core";
 import { GameManager } from "./GameManager";
 import { YamlManager } from "./YamlManager";
-import { Dirent } from "fs";
 
 const { ENABLE_TEST } = process.env;
 
@@ -57,16 +62,16 @@ export class Archipelabot {
       {
         name: "yaml",
         description: "Manage YAML configuration files",
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         run: this.cmdYaml,
       },
       {
         name: "apgame",
         description: "Start and manage Archipelago games",
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         options: [
           {
-            type: ApplicationCommandOptionTypes.STRING,
+            type: ApplicationCommandOptionType.String,
             name: "subcommand",
             description: "What game command to run.",
             choices: [
@@ -77,7 +82,7 @@ export class Archipelabot {
             required: true,
           },
           {
-            type: ApplicationCommandOptionTypes.STRING,
+            type: ApplicationCommandOptionType.String,
             name: "code",
             description:
               "The game code to act upon, if any. Omit if launching a game currently being recruited.",
@@ -89,10 +94,10 @@ export class Archipelabot {
       {
         name: "aptestgame",
         description: "Start Archipelago test games (use /apgame to manage)",
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         options: [
           {
-            type: ApplicationCommandOptionTypes.STRING,
+            type: ApplicationCommandOptionType.String,
             name: "subcommand",
             description: "What game command to run.",
             choices: [{ name: "Start", value: "start" }],
@@ -104,10 +109,10 @@ export class Archipelabot {
       {
         name: "admin",
         description: "Administrative functions (must be a bot admin to use)",
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         options: [
           {
-            type: ApplicationCommandOptionTypes.STRING,
+            type: ApplicationCommandOptionType.String,
             name: "subcommand",
             description: "What subcommand to run.",
             choices: [
@@ -118,7 +123,7 @@ export class Archipelabot {
             required: true,
           },
           {
-            type: ApplicationCommandOptionTypes.USER,
+            type: ApplicationCommandOptionType.String,
             name: "target",
             description: "Which user to affect with this command.",
             required: false,
@@ -130,7 +135,7 @@ export class Archipelabot {
         name: "hello",
         description:
           'Replies "hello". Basically just to make sure the bot is running.',
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         run: async (interaction) => {
           interaction.followUp({
             content: "Hello! I'm awake.",
@@ -146,10 +151,10 @@ export class Archipelabot {
       this._cmds.push({
         name: "test",
         description: "Testing commands",
-        type: "CHAT_INPUT",
+        type: ApplicationCommandType.ChatInput,
         options: [
           {
-            type: ApplicationCommandOptionTypes.STRING,
+            type: ApplicationCommandOptionType.String,
             name: "run",
             description: "What test to run.",
             choices: [
@@ -180,7 +185,8 @@ export class Archipelabot {
     this._client.on(
       "interactionCreate",
       async (interaction: DiscordInteraction) => {
-        if (interaction.isCommand() || interaction.isContextMenu()) {
+        //if (interaction.isCommand() || interaction.isContextMenu()) {
+        if (interaction.type == InteractionType.ApplicationCommand) {
           const slashCommand = this._cmds.find(
             (c) => c.name === interaction.commandName
           );
@@ -197,7 +203,7 @@ export class Archipelabot {
             interaction.followUp({
               content: "An error occured.",
               embeds: [
-                new MessageEmbed({
+                new EmbedBuilder({
                   title: "Error content",
                   description: (e as Error).message,
                   timestamp: Date.now(),
@@ -216,7 +222,7 @@ export class Archipelabot {
     this._client.login((botConf as BotConf).discord.token);
   }
 
-  cmdYaml = async (interaction: BaseCommandInteraction) => {
+  cmdYaml = async (interaction: CommandInteraction) => {
     const {
       user: { id: userId },
     } = interaction;
@@ -230,37 +236,35 @@ export class Archipelabot {
     sendingUser: string,
     receivingUser: DiscordUser | undefined,
     yamlData: YamlData,
-    yamlAttach?: MessageAttachment
+    yamlAttach?: AttachmentBuilder // NOTE: is this being used?
   ) {
     if (!receivingUser || !yamlAttach) return;
+
+    const actRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder({
+        customId: "accept",
+        label: "Accept",
+        style: ButtonStyle.Primary,
+      }),
+      new ButtonBuilder({
+        customId: "acceptAsDefault",
+        label: "Accept as default",
+        style: ButtonStyle.Secondary,
+      }),
+      new ButtonBuilder({
+        customId: "reject",
+        label: "Reject",
+        style: ButtonStyle.Danger,
+      })
+    );
 
     const msg = (await receivingUser.send({
       content: `${userMention(
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
       files: [{ attachment: Buffer.from(yamlData.data) }],
-      components: [
-        new MessageActionRow({
-          components: [
-            new MessageButton({
-              customId: "accept",
-              label: "Accept",
-              style: "PRIMARY",
-            }),
-            new MessageButton({
-              customId: "acceptAsDefault",
-              label: "Accept as default",
-              style: "SECONDARY",
-            }),
-            new MessageButton({
-              customId: "reject",
-              label: "Reject",
-              style: "DANGER",
-            }),
-          ],
-        }),
-      ],
-    })) as DiscordMessage;
+      components: [actRow],
+    }));
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isButton()) return;
@@ -339,10 +343,7 @@ export class Archipelabot {
     this._client.on("interactionCreate", subInteractionHandler);
   }
 
-  cmdAPGame = async (
-    interaction: BaseCommandInteraction,
-    isTestGame = false
-  ) => {
+  cmdAPGame = async (interaction: CommandInteraction, isTestGame = false) => {
     if (isTestGame && interaction.user.id !== "475120074621976587") {
       interaction.followUp({
         ephemeral: true,
@@ -351,7 +352,7 @@ export class Archipelabot {
     } else if (
       !interaction.guild ||
       !interaction.channel ||
-      !interaction.channel.isText()
+      interaction.channel.type !== ChannelType.GuildText
     ) {
       interaction.followUp({
         ephemeral: true,
@@ -472,7 +473,7 @@ export class Archipelabot {
     }
   };
 
-  cmdAdmin = async (interaction: BaseCommandInteraction) => {
+  cmdAdmin = async (interaction: CommandInteraction) => {
     // TODO: Make sure user running command is an admin (hard-coded to me for now)
     if (interaction.user.id !== "475120074621976587") {
       interaction.followUp({
@@ -512,11 +513,11 @@ export class Archipelabot {
                   );
                   return interaction.user.send(supervisorMsg);
                 }
-              })()) as DiscordMessage;
+              })());
 
               const msgCollector = msg.channel.createMessageCollector({
                 filter: (msgIn) =>
-                  msgIn.type === "REPLY" &&
+                  msgIn.type === MessageType.Reply &&
                   msgIn.reference?.messageId === msg.id &&
                   msgIn.attachments.size > 0,
               });
@@ -538,8 +539,8 @@ export class Archipelabot {
                         this.sendYamlForApproval(
                           sendingUser,
                           targetUser.user,
-                          validate,
-                          yamls.first()
+                          validate
+                          //yamls.first() // TODO: not sure that I'm even using this anywhere
                         );
                       } else {
                         msg.edit(
@@ -574,7 +575,7 @@ export class Archipelabot {
     }
   };
 
-  cmdTest = async (interaction: BaseCommandInteraction) => {
+  cmdTest = async (interaction: CommandInteraction) => {
     // TODO: Make sure user running command is a developer (hard-coded to me for now)
     if (interaction.user.id !== "475120074621976587") {
       interaction.followUp({
@@ -585,7 +586,7 @@ export class Archipelabot {
     }
 
     switch (interaction.options.get("run", true).value as string) {
-      case "sendfile":
+      case "sendfile": // Tests attaching a file to a message.
         interaction.followUp({
           content: "Here you go.",
           files: [
@@ -596,7 +597,7 @@ export class Archipelabot {
           ],
         });
         break;
-      case "zip":
+      case "zip": // Tests extracting a spoiler file from an AP archive.
         {
           const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
           interaction.followUp({
@@ -610,14 +611,14 @@ export class Archipelabot {
           });
         }
         break;
-      case "port":
+      case "port": // Tests checking port 38281.
         interaction.followUp(
           `Port 38281 is ${
             (await isPortAvailable(38281)) ? "" : "not "
           }available.`
         );
         break;
-      case "spoiler":
+      case "spoiler": // Tests reading a spoiler file for who's playing.
         {
           const bigSpoiler = (
             await readFile("./test/AP_51012885067020691880_Spoiler.txt")
@@ -637,7 +638,7 @@ export class Archipelabot {
             embeds:
               playerListing.length > 0
                 ? [
-                    new MessageEmbed({
+                    new EmbedBuilder({
                       title: "Who's Playing What",
                       description: playerListing
                         .map((i) => `${i[1]}: ${i[2]} → **${i[3]}**`)
@@ -648,7 +649,7 @@ export class Archipelabot {
           });
         }
         break;
-      case "rebuildyaml":
+      case "rebuildyaml": // Rebuilds the YAML table. This is a destructive action.
         {
           const codes: string[] = [];
 
@@ -696,7 +697,7 @@ export class Archipelabot {
           );
         }
         break;
-      case "checkscreen":
+      case "checkscreen": // Checks for presence of `screen` multiplexer.
         interaction.followUp(
           `This system ${
             (await SystemHasScreen()) ? "has" : "does not have"

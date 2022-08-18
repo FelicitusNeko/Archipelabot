@@ -1,4 +1,4 @@
-import { Client as DiscordClient, Intents } from "discord.js";
+import { Client as DiscordClient, IntentsBitField } from "discord.js";
 import { existsSync } from "fs";
 import { join as pathJoin } from "path";
 
@@ -23,11 +23,11 @@ const { PYTHON_PATH, AP_PATH } = process.env;
   new Archipelabot(
     new DiscordClient({
       intents: [
-        Intents.FLAGS.GUILDS,
-        Intents.FLAGS.GUILD_MESSAGES,
-        Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-        Intents.FLAGS.DIRECT_MESSAGES,
-        Intents.FLAGS.DIRECT_MESSAGE_REACTIONS,
+        IntentsBitField.Flags.Guilds,
+        IntentsBitField.Flags.GuildMessages,
+        IntentsBitField.Flags.GuildMessageReactions,
+        IntentsBitField.Flags.DirectMessages,
+        IntentsBitField.Flags.DirectMessageReactions,
       ],
     })
   );

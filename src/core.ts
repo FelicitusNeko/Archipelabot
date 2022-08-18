@@ -5,8 +5,7 @@ import { get as httpsGet } from "https";
 import { resolve as pathResolve } from "path";
 
 import {
-  BaseCommandInteraction,
-  ChatInputApplicationCommandData,
+  ChatInputApplicationCommandData, CommandInteraction,
 } from "discord.js";
 import * as YAML from "yaml";
 
@@ -57,7 +56,7 @@ export enum GameFunctionState {
  */
 export interface Command extends ChatInputApplicationCommandData {
   /** The function to run when this command is invoked. */
-  run: (interaction: BaseCommandInteraction) => Promise<void>;
+  run: (interaction: CommandInteraction) => Promise<void>;
 }
 
 /** Data pertaining to the parsed YAML. */
@@ -108,6 +107,7 @@ const GetGameList = (() => {
 
 /**
  * Returns whether the current operating system has the given application available.
+ * Only currently works on Linux.
  * @async
  * @param pgm The program to check for.
  * @returns {boolean} Whether that program is available on this system.
