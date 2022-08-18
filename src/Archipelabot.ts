@@ -586,7 +586,7 @@ export class Archipelabot {
     }
 
     switch (interaction.options.get("run", true).value as string) {
-      case "sendfile":
+      case "sendfile": // Tests attaching a file to a message.
         interaction.followUp({
           content: "Here you go.",
           files: [
@@ -597,7 +597,7 @@ export class Archipelabot {
           ],
         });
         break;
-      case "zip":
+      case "zip": // Tests extracting a spoiler file from an AP archive.
         {
           const testZip = new AdmZip("./test/AP_77478974287435297562.zip");
           interaction.followUp({
@@ -611,14 +611,14 @@ export class Archipelabot {
           });
         }
         break;
-      case "port":
+      case "port": // Tests checking port 38281.
         interaction.followUp(
           `Port 38281 is ${
             (await isPortAvailable(38281)) ? "" : "not "
           }available.`
         );
         break;
-      case "spoiler":
+      case "spoiler": // Tests reading a spoiler file for who's playing.
         {
           const bigSpoiler = (
             await readFile("./test/AP_51012885067020691880_Spoiler.txt")
@@ -649,7 +649,7 @@ export class Archipelabot {
           });
         }
         break;
-      case "rebuildyaml":
+      case "rebuildyaml": // Rebuilds the YAML table. This is a destructive action.
         {
           const codes: string[] = [];
 
@@ -697,7 +697,7 @@ export class Archipelabot {
           );
         }
         break;
-      case "checkscreen":
+      case "checkscreen": // Checks for presence of `screen` multiplexer.
         interaction.followUp(
           `This system ${
             (await SystemHasScreen()) ? "has" : "does not have"
