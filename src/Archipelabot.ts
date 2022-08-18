@@ -1,6 +1,6 @@
 import {
   Client as DiscordClient,
-  Message as DiscordMessage,
+  // Message as DiscordMessage,
   Interaction as DiscordInteraction,
   User as DiscordUser,
   CommandInteraction,
@@ -240,7 +240,7 @@ export class Archipelabot {
   ) {
     if (!receivingUser || !yamlAttach) return;
 
-    const actRow = new ActionRowBuilder().addComponents(
+    const actRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder({
         customId: "accept",
         label: "Accept",
@@ -263,8 +263,8 @@ export class Archipelabot {
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
       files: [{ attachment: Buffer.from(yamlData.data) }],
-      components: [actRow], // TODO: figure out what it wants from me here
-    })) as DiscordMessage;
+      components: [actRow],
+    }));
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isButton()) return;
@@ -513,7 +513,7 @@ export class Archipelabot {
                   );
                   return interaction.user.send(supervisorMsg);
                 }
-              })()) as DiscordMessage;
+              })());
 
               const msgCollector = msg.channel.createMessageCollector({
                 filter: (msgIn) =>
@@ -540,7 +540,7 @@ export class Archipelabot {
                           sendingUser,
                           targetUser.user,
                           validate
-                          //yamls.first() // TODO: not sure that I'm even using this anywhere, and it's broken in v14
+                          //yamls.first() // TODO: not sure that I'm even using this anywhere
                         );
                       } else {
                         msg.edit(

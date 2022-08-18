@@ -15,18 +15,15 @@ import {
   Message as DiscordMessage,
   CommandInteraction,
   ReactionCollector,
-
   ActionRowBuilder,
   AttachmentBuilder,
   ButtonBuilder,
   EmbedBuilder,
   SelectMenuBuilder,
-
   MessageEditOptions,
   ButtonStyle,
   ChannelType,
   MessageType,
-
   userMention,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
@@ -166,7 +163,7 @@ export class GameManager {
     this._guildId = interaction.guildId;
     this._channelId = interaction.channelId;
     this._hostId = interaction.user.id;
-    this._msg = (await interaction.followUp({
+    this._msg = await interaction.followUp({
       content: `${userMention(this._hostId)} is starting a ${
         this._testGame ? "testing " : ""
       }game!`,
@@ -186,7 +183,7 @@ export class GameManager {
           },
         }),
       ],
-    })) as DiscordMessage;
+    });
 
     this._reactCollector = this._msg.createReactionCollector({
       filter: (reaction, user) =>
@@ -306,21 +303,19 @@ export class GameManager {
     // TODO: Request YAMLs from players whose default YAML has an invalid game in it
 
     if (yamlRequests.size + joinSupport.size === 0) {
-      this._msg = (await interaction.followUp(
-        "Now generating the game..."
-      )) as DiscordMessage;
+      this._msg = await interaction.followUp("Now generating the game...");
       this.LaunchGame(...defaultYamls);
     } else {
       const requestingUsers = new Set([...yamlRequests, ...joinSupport]);
       this._state = GameState.GatheringYAMLs;
 
-      this._msg = (await interaction.followUp(
+      this._msg = await interaction.followUp(
         "The following player(s) need to provide a YAML before the game can begin. " +
           `The game will start <t:${
             Math.floor(Date.now() / 1000) + 30 * 60
           }:R> if not everyone has responded.\n` +
           [...requestingUsers].map((i) => userMention(i)).join(", ")
-      )) as DiscordMessage;
+      );
 
       const { _msg } = this;
 
@@ -415,22 +410,24 @@ export class GameManager {
         baseRequestMsg +
         ` If you've changed your mind, you can click on "Withdraw". This message will time out <t:${timeout}:R>.`,
       components: [
-        new ActionRowBuilder().addComponents(
+        new ActionRowBuilder<SelectMenuBuilder>().addComponents(
           new SelectMenuBuilder({
             customId: "selectYaml",
             placeholder: "Select a YAML",
-            options: (await yamlMgr.GetYamlOptionsV3(states)).map(i => i.toJSON()),
-          }),
+            options: (
+              await yamlMgr.GetYamlOptionsV3(states)
+            ).map((i) => i.toJSON()),
+          })
         ),
-        new ActionRowBuilder().addComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder({
             customId: "withdraw",
             label: "Withdraw from this game",
             style: ButtonStyle.Danger,
-          }),
-        )
+          })
+        ),
       ],
-    })) as DiscordMessage;
+    }));
 
     return (async (): Promise<[string, string | null]> => {
       let retval: string | null = null;
@@ -776,7 +773,9 @@ export class GameManager {
         writeMsg({
           content: "An error occurred during game generation.",
           files: [
-            new AttachmentBuilder((e as Error).message, {name: "Generation Error.txt"}),
+            new AttachmentBuilder((e as Error).message, {
+              name: "Generation Error.txt",
+            }),
           ],
         });
         this._state = GameState.GenerationFailed;
@@ -795,7 +794,8 @@ export class GameManager {
 
     const channel = this._client.channels.cache.get(this._channelId);
     if (!channel) throw new Error("Cannot find channel");
-    if (channel.type !== ChannelType.GuildText) throw new Error("Channel is not text channel");
+    if (channel.type !== ChannelType.GuildText)
+      throw new Error("Channel is not text channel");
 
     if (this._state > GameState.Ready) {
       channel.send(`Game ${this._code} is already running.`);
@@ -897,9 +897,12 @@ export class GameManager {
 
     const UpdateOutput = () => {
       lastUpdate = Date.now();
-      const curFields = liveEmbed.data.fields ?? [{name: "Server output", value: ""}];
+      const curFields = liveEmbed.data.fields ?? [
+        { name: "Server output", value: "" },
+      ];
       curFields[0].value = lastFiveLines.join("\n");
-      if (curFields[0].value.length > 1024) curFields[0].value = curFields[0].value.substring(0, 1021) + "…";
+      if (curFields[0].value.length > 1024)
+        curFields[0].value = curFields[0].value.substring(0, 1021) + "…";
       liveEmbed.setFields(curFields);
       msg.edit({
         embeds: [liveEmbed],
@@ -950,7 +953,7 @@ export class GameManager {
         apIn?.write(msgIn.content.replace(/^\./, "/") + "\n");
         lastFiveLines.push("← " + msgIn.content.replace(/^\./, "/"));
         while (lastFiveLines.length > 5) lastFiveLines.shift();
-  
+
         if (msgIn.deletable) msgIn.delete();
         else msgIn.react("⌨️");
       } else msgIn.react("❌");

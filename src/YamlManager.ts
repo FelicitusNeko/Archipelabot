@@ -2,24 +2,20 @@ import { readdirSync } from "fs";
 import { readdir, unlink, writeFile } from "fs/promises";
 import { basename, join as pathJoin, sep as pathSep } from "path";
 
-//import { userMention } from "@discordjs/builders";
 import {
   User as DiscordUser,
   Client as DiscordClient,
   Interaction as DiscordInteraction,
   Message as DiscordMessage,
   CommandInteraction,
-
   ActionRowBuilder,
   ButtonBuilder,
   EmbedBuilder,
   SelectMenuBuilder,
   SelectMenuOptionBuilder,
-
   InteractionUpdateOptions,
   ButtonStyle,
   MessageType,
-
   userMention,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
@@ -110,7 +106,7 @@ export class YamlManager {
         return [
           new EmbedBuilder({
             title: curEntry.description ?? "Unknown",
-            footer: {text: userMention(calledUser ?? curEntry.userId)},
+            footer: { text: userMention(calledUser ?? curEntry.userId) },
             fields: [
               {
                 name: "Games",
@@ -128,15 +124,15 @@ export class YamlManager {
     };
 
     /** A component row containing a YAML dropdown box. */
-    const yamlRow = new ActionRowBuilder().addComponents(
+    const yamlRow = new ActionRowBuilder<SelectMenuBuilder>().addComponents(
       new SelectMenuBuilder({
         customId: "yaml",
         placeholder: "Select a YAML",
-        options: (await this.GetYamlOptionsV3([])).map(i => i.toJSON()),
-      }),
+        options: (await this.GetYamlOptionsV3([])).map((i) => i.toJSON()),
+      })
     );
     /** A component row containing buttons to manage individual YAMLs. */
-    const buttonRow = new ActionRowBuilder().addComponents(
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder({
         customId: "backToYamlList",
         label: "Back",
@@ -151,18 +147,18 @@ export class YamlManager {
         customId: "deleteYaml",
         label: "Delete",
         style: ButtonStyle.Danger,
-      }),
+      })
     );
     /** The default starting state of the YAML manager. */
     const startingState = {
       content:
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       embeds: [],
-      //components: [yamlRow], // TODO: figure out what it wants from me here too
+      components: [yamlRow],
     };
 
     /** The message that will be controlled to represent the YAML management interface. */
-    const msg = (await this._user.send(startingState)) as DiscordMessage;
+    const msg = await this._user.send(startingState);
 
     let { result, terminate } = await YamlManager.YamlListener(msg);
 
@@ -187,7 +183,8 @@ export class YamlManager {
             const worstState = YamlManager.GetWorstStatus(curEntry.games);
             (buttonRow.components[1] as ButtonBuilder).setDisabled(
               worstState > GameFunctionState.Playable ||
-              playerEntry?.defaultCode === curEntry.code);
+                playerEntry?.defaultCode === curEntry.code
+            );
             subInt.update({
               content:
                 "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
@@ -236,7 +233,7 @@ export class YamlManager {
             subInt.update({
               content: "Are you sure you wish to delete this YAML?",
               components: [
-                new ActionRowBuilder().addComponents(
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
                   new ButtonBuilder({
                     customId: "deleteYamlYes",
                     label: "Yes",
@@ -246,7 +243,7 @@ export class YamlManager {
                     customId: "deleteYamlNo",
                     label: "No",
                     style: ButtonStyle.Secondary,
-                  }),
+                  })
                 ),
               ],
             });
