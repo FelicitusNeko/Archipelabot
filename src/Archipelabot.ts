@@ -15,6 +15,11 @@ import {
   ChannelType,
   ButtonStyle,
   userMention,
+  SelectMenuBuilder,
+  APIEmbedField,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from "discord.js";
 import * as AdmZip from "adm-zip";
 
@@ -148,28 +153,62 @@ export class Archipelabot {
     //console.debug("Test state:", ENABLE_TEST);
     if (ENABLE_TEST === "1") {
       console.info("Enabling test suite");
-      this._cmds.push({
-        name: "test",
-        description: "Testing commands",
-        type: ApplicationCommandType.ChatInput,
-        options: [
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "run",
-            description: "What test to run.",
-            choices: [
-              { name: "Send file", value: "sendfile" },
-              { name: "ZIP", value: "zip" },
-              { name: "Port detection", value: "port" },
-              { name: "Long embeds/spoiler parsing", value: "spoiler" },
-              { name: "Rebuild YAML table", value: "rebuildyaml" },
-              { name: "Check for 'screen'", value: "checkscreen" },
-            ],
-            required: true,
+      this._cmds.push(
+        {
+          name: "apstart",
+          description: "[NYI] Start a new Archipelago multiworld.",
+          type: ApplicationCommandType.ChatInput,
+          run: async (i) => {
+            i.reply({
+              content: "Not implemented yet.",
+              ephemeral: true,
+            });
           },
-        ],
-        run: this.cmdTest,
-      });
+        },
+        {
+          name: "apresume",
+          description: "[NYI] Resume an existing Archipelago multiworld.",
+          type: ApplicationCommandType.ChatInput,
+          options: [
+            {
+              type: ApplicationCommandOptionType.String,
+              name: "code",
+              description: "The four-letter code for the game to resume.",
+              required: true,
+            },
+          ],
+          run: async (i) => {
+            i.reply({
+              content: "Not implemented yet.",
+              ephemeral: true,
+            });
+          },
+        },
+        {
+          name: "test",
+          description: "Testing commands",
+          type: ApplicationCommandType.ChatInput,
+          options: [
+            {
+              type: ApplicationCommandOptionType.String,
+              name: "run",
+              description: "What test to run.",
+              choices: [
+                { name: "Send file", value: "sendfile" },
+                { name: "ZIP", value: "zip" },
+                { name: "Port detection", value: "port" },
+                { name: "Long embeds/spoiler parsing", value: "spoiler" },
+                { name: "Rebuild YAML table", value: "rebuildyaml" },
+                { name: "Check for 'screen'", value: "checkscreen" },
+                { name: "Test new GameManager joiner", value: "joinertest" },
+                { name: "Test new GameManager runner", value: "runnertest" },
+              ],
+              required: true,
+            },
+          ],
+          run: this.cmdTest,
+        }
+      );
     }
 
     console.debug(
@@ -258,13 +297,13 @@ export class Archipelabot {
       })
     );
 
-    const msg = (await receivingUser.send({
+    const msg = await receivingUser.send({
       content: `${userMention(
         sendingUser
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
       files: [{ attachment: Buffer.from(yamlData.data) }],
       components: [actRow],
-    }));
+    });
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (!subInt.isButton()) return;
@@ -498,7 +537,7 @@ export class Archipelabot {
             if (!targetUser.value || !targetUser.user)
               throw new Error("Failed to resolve user");
             else {
-              const msg = (await (async () => {
+              const msg = await (async () => {
                 const supervisorMsg = {
                   ephemeral: true,
                   content: `Assigning a YAML to ${userMention(
@@ -513,7 +552,7 @@ export class Archipelabot {
                   );
                   return interaction.user.send(supervisorMsg);
                 }
-              })());
+              })();
 
               const msgCollector = msg.channel.createMessageCollector({
                 filter: (msgIn) =>
@@ -704,10 +743,324 @@ export class Archipelabot {
           } \`screen\` available to it.`
         );
         break;
+      case "joinertest":
+        return this.joinerTest(interaction);
+      case "runnertest":
+        return this.runnerTest(interaction);
       default:
         interaction.followUp(
           "Unrecognized subcommand. That shouldn't happen..."
         );
     }
+  };
+
+  joinerTest = async (interaction: CommandInteraction) => {
+    {
+      const launchBtn = new ButtonBuilder()
+        .setCustomId("launch")
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji("🚀")
+        .setLabel("Launch")
+        .setDisabled(true);
+
+      const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("default")
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("⚔️")
+          .setLabel("Join"),
+        new ButtonBuilder()
+          .setCustomId("select")
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("🛡️")
+          .setLabel("Join with..."),
+        launchBtn,
+        new ButtonBuilder()
+          .setCustomId("cancel")
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji("🚪")
+          .setLabel("Cancel")
+      );
+
+      const msg = await interaction.followUp({
+        content: `${userMention(
+          interaction.user.id
+        )} is starting a game! ||not actually but pretend they are||`,
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Multiworld Game Call")
+            .setDescription(
+              'Click "⚔️ Join" to join this game with your default YAML.\n' +
+                'Click "🛡️ Join with..." to join with a different YAML.\n' +
+                'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.'
+            )
+            .setColor("Gold")
+            .setTimestamp(Date.now())
+            .setFooter({ text: "Game code: ABCD" }),
+        ],
+        components: [buttonRow],
+      });
+
+      const subInteractionHandler = async (subInt: DiscordInteraction) => {
+        if (subInt.channelId !== msg.channelId) return;
+        if (!(subInt.isButton() || subInt.isSelectMenu())) return;
+
+        if (subInt.message.id == msg.id) {
+          // Main message
+          console.debug("Input from main message");
+          if (!subInt.isButton()) return;
+
+          switch (subInt.customId) {
+            case "default":
+              launchBtn.setDisabled(false);
+              subInt.reply({
+                content: "You joined with your default YAML.",
+                ephemeral: true,
+              });
+              msg.edit({ components: [buttonRow] });
+              console.debug(
+                `Simulating adding default for ${subInt.user.username}#${subInt.user.discriminator}`
+              );
+              break;
+            case "select":
+              {
+                const yamlMgr = new YamlManager(this._client, subInt.user.id);
+                const yamlList = new SelectMenuBuilder()
+                  .setCustomId("yaml")
+                  .setPlaceholder("Select your YAML")
+                  .addOptions([...(await yamlMgr.GetYamlOptionsV3())]);
+
+                console.debug(
+                  `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`
+                );
+                subInt.reply({
+                  content:
+                    "Select a YAML to play. You can select more than one if you wish, including the same YAML multiple times.",
+                  components: [
+                    new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+                      yamlList
+                    ),
+                  ],
+                  ephemeral: true,
+                });
+              }
+              break;
+            case "launch":
+              if (subInt.user.id !== interaction.user.id) {
+                subInt.reply({
+                  content: "Only the game's host can launch the game.",
+                  ephemeral: true,
+                });
+                break;
+              }
+
+              subInt.deferReply();
+
+              msg.edit({
+                content:
+                  "Game ABCD is now closed. ||not that there actually was one; it was a test||",
+                embeds: [],
+                components: [],
+              });
+              this._client.off("interactionCreate", subInteractionHandler);
+
+              setTimeout(
+                () =>
+                  subInt.followUp(
+                    "If this was a real game, it would have generated at this point."
+                  ),
+                3000
+              );
+              break;
+            case "cancel":
+              if (subInt.user.id !== interaction.user.id) {
+                subInt.reply({
+                  content: "Only the game's host can cancel the game.",
+                  ephemeral: true,
+                });
+                break;
+              }
+
+              msg.edit({
+                content:
+                  "The game has been cancelled. ||not that there actually was one; it was a test||",
+                embeds: [],
+                components: [],
+              });
+              this._client.off("interactionCreate", subInteractionHandler);
+              break;
+            default:
+              subInt.reply({
+                content: `I don't know what "${subInt.customId}" means.`,
+                ephemeral: true,
+              });
+              break;
+          }
+        } else if (subInt.message.reference?.messageId === msg.id) {
+          // YAML response
+          console.debug("Input from YAML selector");
+          if (subInt.isSelectMenu() && subInt.customId === "yaml") {
+            launchBtn.setDisabled(false);
+            msg.edit({ components: [buttonRow] });
+
+            console.debug(
+              `Simulating adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`
+            );
+            subInt.reply({
+              content: `YAML ${subInt.values[0]} added to this game. You can add more by selecting them in the list.`,
+              ephemeral: true,
+            });
+            // here's where we would retrieve the YAML
+          }
+        } else {
+          subInt.reply({
+            content: `Hm, I can't seem to identify this message.`,
+            ephemeral: true,
+          });
+          console.debug("Unidentified message", subInt.message.id, msg.id);
+        }
+      };
+
+      this._client.on("interactionCreate", subInteractionHandler);
+    }
+  };
+
+  runnerTest = async (interaction: CommandInteraction) => {
+    const serverOutput: APIEmbedField = {
+      name: "Server output",
+      value:
+        "Kewlio has joined the game\n" +
+        "Weirdo has found Something at Somewhere for Someone\n" +
+        "Matto has completed their goal.\n" +
+        "Sicko: lol butts",
+    };
+    const liveEmbed = new EmbedBuilder()
+      .setColor("Green")
+      .setTitle("Archipelago Server")
+      .setFields(
+        serverOutput,
+        {
+          name: "Server",
+          value: `example.com:12345`,
+          inline: true,
+        },
+        {
+          name: "Host",
+          value: userMention(interaction.user.id),
+        }
+      )
+      .setTimestamp(Date.now())
+      .setFooter({
+        text: "Game code: ABCD",
+      });
+
+    const msg = await interaction.followUp({
+      content:
+        "Game ABCD is live!\n" +
+        "The host can send commands to the server either by selecting them from the list, or replying to this message. " +
+        "To send a slash command, precede it with a period instead of a slash so that it doesn't get intercepted by Discord. " +
+        "For instance: `.forfeit player`",
+      embeds: [liveEmbed],
+      components: [
+        new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+          new SelectMenuBuilder()
+            .setCustomId("cmd")
+            .setPlaceholder("Select a command")
+            .addOptions(
+              {
+                value: "release",
+                label: "Release (forfeit)",
+                description:
+                  "Releases a player's world's items to their respective players.",
+              },
+              {
+                value: "collect",
+                label: "Collect",
+                description:
+                  "Gathers a player's items from everyone else's worlds.",
+              },
+              {
+                value: "exit",
+                label: "Close server",
+                description:
+                  "Closes the server. It can be relaunched later with `/apresume ABCD`.",
+              }
+            )
+        ),
+      ],
+    });
+
+    const subInteractionHandler = async (subInt: DiscordInteraction) => {
+      if (subInt.channelId !== msg.channelId) return;
+      if (!(subInt.isSelectMenu() || subInt.isModalSubmit())) return;
+
+      const modalPrompt = async (event: string) => {
+        if (!subInt.isSelectMenu()) return;
+        const modal = new ModalBuilder()
+          .setTitle("Specify user")
+          .setCustomId(`${event}-${msg.id}`)
+          .setComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder()
+                .setLabel(`Who would you like to ${event}?`)
+                .setCustomId("target")
+                .setRequired(true)
+                .setStyle(TextInputStyle.Short)
+            )
+          );
+
+        await subInt.showModal(modal);
+      };
+
+      if (subInt.isSelectMenu()) {
+        if (subInt.message.id !== msg.id) return;
+        switch (subInt.values[0]) {
+          case "release":
+          case "collect":
+            // Release or collect
+            msg.edit({ components: msg.components });
+            modalPrompt(subInt.values[0]);
+            break;
+          case "exit":
+            this._client.off("interactionCreate", subInteractionHandler);
+            msg.edit({
+              content:
+                "Server for game ABCD has closed normally. It can be relaunched with `/apresume ABCD`.",
+              embeds: [],
+              components: [],
+            });
+            subInt.reply({
+              content: "The game has been closed.",
+              ephemeral: true,
+            });
+            break;
+          case undefined:
+            subInt.deleteReply();
+            break;
+          default:
+            subInt.reply({
+              content: `I don't know what ${subInt.values[0]} means.`,
+              ephemeral: true,
+            });
+        }
+      } else {
+        const idData = /^([a-z]+)-(\d+)$/.exec(subInt.customId);
+        if (idData === null) return;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const [_, event, msgId] = idData;
+        if (msgId !== msg.id) {
+          console.debug("Unidentified reference", subInt.message?.reference?.messageId, msg.id);
+          return;
+        }
+        const slotName = subInt.fields.getTextInputValue("target");
+        // Here is where we would pipe the command to the server
+        subInt.reply({
+          content: `Sending command to ${event} ${slotName}.`,
+          ephemeral: true
+        });
+      }
+    };
+
+    this._client.on("interactionCreate", subInteractionHandler);
   };
 }
