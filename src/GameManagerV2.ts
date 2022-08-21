@@ -168,32 +168,44 @@ export class GameManagerV2 {
         .setLabel("Cancel")
     );
 
-    // TODO: add a field to display who's joined
     // TODO: add a YAML listener to allow players to directly submit a YAML through the joiner
+    const playersField: APIEmbedField = {
+      name: "Players",
+      value: "None yet",
+    };
+    const liveEmbed = new EmbedBuilder()
+      .setTitle(this._testGame ? "Testing Game Call" : "Multiworld Game Call")
+      .setDescription(
+        (this._testGame
+          ? "This is a testing game. Expect things to go wrong and/or implode. Game may end prematurely for any reason.\n" +
+            "Testing YAMLs are available for this game.\n\n"
+          : "") +
+          'Click "⚔️ Join" to join this game with your default YAML.\n' +
+          'Click "🛡️ Join with..." to join with a different YAML.\n' +
+          'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.'
+      )
+      .setFields(playersField)
+      .setColor("Gold")
+      .setTimestamp(Date.now())
+      .setFooter({ text: `Game code: ${this.code}` });
     const msg = await interaction.followUp({
       content: `${userMention(this._hostId)} is starting a ${
         this._testGame ? "testing " : ""
       }game!`,
-      embeds: [
-        new EmbedBuilder()
-          .setTitle(
-            this._testGame ? "Testing Game Call" : "Multiworld Game Call"
-          )
-          .setDescription(
-            (this._testGame
-              ? "This is a testing game. Expect things to go wrong and/or implode. Game may end prematurely for any reason.\n" +
-                "Testing YAMLs are available for this game.\n\n"
-              : "") +
-              'Click "⚔️ Join" to join this game with your default YAML.\n' +
-              'Click "🛡️ Join with..." to join with a different YAML.\n' +
-              'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.'
-          )
-          .setColor("Gold")
-          .setTimestamp(Date.now())
-          .setFooter({ text: `Game code: ${this.code}` }),
-      ],
+      embeds: [liveEmbed],
       components: [buttonRow],
     });
+
+    const UpdatePlayers = () => {
+      playersField.value = Object.entries(this._players)
+        .filter((i) => i[1].length)
+        .map((i) => `${userMention(i[0])} ×${i[1].length}`)
+        .join("\n");
+      return msg.edit({
+        components: [buttonRow],
+        embeds: [liveEmbed],
+      });
+    };
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (subInt.channelId !== msg.channelId) return;
@@ -202,6 +214,7 @@ export class GameManagerV2 {
       const addYaml = (userId: string, code: string) => {
         if (!this._players[userId]) this._players[userId] = [code];
         else this._players[userId].push(code);
+        UpdatePlayers();
       };
 
       const hasYaml = (userId: string, code: string) => {
@@ -244,7 +257,8 @@ export class GameManagerV2 {
                 console.debug(
                   `Adding default for ${subInt.user.username}#${subInt.user.discriminator}`
                 );
-                msg.edit({ components: [buttonRow] });
+                //msg.edit({ components: [buttonRow] });
+                UpdatePlayers();
               }
             }
             break;
@@ -324,6 +338,7 @@ export class GameManagerV2 {
           );
           addYaml(subInt.user.id, subInt.values[0]);
           launchBtn.setDisabled(this.yamlCount === 0);
+          UpdatePlayers();
           subInt.reply({
             content: `YAML ${subInt.values[0]} added to this game.`,
             ephemeral: true,
