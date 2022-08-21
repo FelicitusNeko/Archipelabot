@@ -1049,7 +1049,7 @@ export class Archipelabot {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const [_, event, msgId] = idData;
         if (msgId !== msg.id) {
-          console.debug("Unidentified reference", subInt.message?.reference?.messageId, msg.id);
+          console.debug("Unidentified reference", msgId, msg.id);
           return;
         }
         const slotName = subInt.fields.getTextInputValue("target");
