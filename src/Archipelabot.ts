@@ -42,6 +42,7 @@ import {
   YamlData,
 } from "./core";
 import { GameManager } from "./GameManager";
+import { GameManagerV2 } from "./GameManagerV2";
 import { YamlManager } from "./YamlManager";
 
 const { ENABLE_TEST } = process.env;
@@ -54,6 +55,8 @@ export class Archipelabot {
 
   /** The list of games currently being used. */
   private _games: GameManager[] = [];
+  /** The list of games currently being used. */
+  private _gamesv2: GameManagerV2[] = [];
 
   /** The client's user ID, if it is available. If not, returns an empty string. */
   public get clientId(): string {
@@ -156,18 +159,13 @@ export class Archipelabot {
       this._cmds.push(
         {
           name: "apstart",
-          description: "[NYI] Start a new Archipelago multiworld.",
+          description: "[Beta] Start a new Archipelago multiworld.",
           type: ApplicationCommandType.ChatInput,
-          run: async (i) => {
-            i.reply({
-              content: "Not implemented yet.",
-              ephemeral: true,
-            });
-          },
+          run: this.cmdAPStartV2,
         },
         {
           name: "apresume",
-          description: "[NYI] Resume an existing Archipelago multiworld.",
+          description: "[Beta] Resume an existing Archipelago multiworld.",
           type: ApplicationCommandType.ChatInput,
           options: [
             {
@@ -177,12 +175,7 @@ export class Archipelabot {
               required: true,
             },
           ],
-          run: async (i) => {
-            i.reply({
-              content: "Not implemented yet.",
-              ephemeral: true,
-            });
-          },
+          run: this.cmdAPResumeV2,
         },
         {
           name: "test",
@@ -510,6 +503,49 @@ export class Archipelabot {
           break;
       }
     }
+  };
+
+  cmdAPStartV2 = async (
+    interaction: CommandInteraction,
+    isTestGame = false
+  ) => {
+    const gameHere = this._games.find((i) => i.guildId === interaction.guildId);
+    if (gameHere) {
+      interaction.followUp(
+        "There is already a game being organized on this server!"
+      );
+    } else {
+      const game = await GameManagerV2.NewGame(this._client, isTestGame);
+      this._gamesv2.push(game);
+      await game.RecruitGame(interaction);
+    }
+  };
+
+  cmdAPResumeV2 = async (interaction: CommandInteraction) => {
+    const code = interaction.options.get("code", false);
+    if (code && typeof code.value === "string") {
+      const codeUpper = code.value.toUpperCase();
+      const creationData = await GameManagerV2.GetCreationData(codeUpper);
+
+      if (creationData) {
+        if (interaction.guildId !== creationData.guild) {
+          interaction.followUp(
+            `Game ${codeUpper} was not created on this server.`
+          );
+        } else if (interaction.user.id !== creationData.host) {
+          interaction.followUp(
+            `This is not your game! Game ${codeUpper} was created by ${userMention(
+              creationData.host
+            )}.`
+          );
+        } else {
+          interaction.followUp(`Attempting to launch game ${codeUpper}.`);
+          const game = await GameManagerV2.fromCode(this._client, codeUpper);
+          this._gamesv2.push(game);
+          game.RunGame(interaction.channelId);
+        }
+      } else interaction.followUp(`Game code ${codeUpper} not found.`);
+    } else interaction.followUp("No game code was specified.");
   };
 
   cmdAdmin = async (interaction: CommandInteraction) => {
@@ -1056,7 +1092,7 @@ export class Archipelabot {
         // Here is where we would pipe the command to the server
         subInt.reply({
           content: `Sending command to ${event} ${slotName}.`,
-          ephemeral: true
+          ephemeral: true,
         });
       }
     };
