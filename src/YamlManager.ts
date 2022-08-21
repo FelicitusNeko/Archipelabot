@@ -1,4 +1,4 @@
-import { readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { readdir, unlink, writeFile } from "fs/promises";
 import { basename, join as pathJoin, sep as pathSep } from "path";
 
@@ -100,13 +100,13 @@ export class YamlManager {
   public async YamlManager() {
     let curEntry: YamlTable | null = null;
 
-    const generateCurEntryEmbed = (calledUser?: string) => {
+    const generateCurEntryEmbed = (/*calledUser?: string*/) => {
       if (!curEntry) return [];
       else
         return [
           new EmbedBuilder({
             title: curEntry.description ?? "Unknown",
-            footer: { text: userMention(calledUser ?? curEntry.userId) },
+            //footer: { text: userMention(calledUser ?? curEntry.userId) },
             fields: [
               {
                 name: "Games",
@@ -155,6 +155,7 @@ export class YamlManager {
         "You can reply to this message with a YAML to add it, or select one from the list to act on it.",
       embeds: [],
       components: [yamlRow],
+      files: [],
     };
 
     /** The message that will be controlled to represent the YAML management interface. */
@@ -188,8 +189,16 @@ export class YamlManager {
             subInt.update({
               content:
                 "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
-              embeds: generateCurEntryEmbed(subInt.user.id),
+              embeds: generateCurEntryEmbed(/*subInt.user.id*/),
               components: [buttonRow],
+              files: [
+                {
+                  attachment: readFileSync(
+                    pathJoin("yamls", this.userId, `${curEntry.filename}.yaml`)
+                  ),
+                  name: `${curEntry.filename}.yaml`,
+                },
+              ],
             });
           }
         }
