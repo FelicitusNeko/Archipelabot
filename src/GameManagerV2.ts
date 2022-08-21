@@ -190,7 +190,7 @@ export class GameManagerV2 {
           )
           .setColor("Gold")
           .setTimestamp(Date.now())
-          .setFooter({ text: "Game code: ABCD" }),
+          .setFooter({ text: `Game code: ${this.code}` }),
       ],
       components: [buttonRow],
     });
@@ -211,7 +211,6 @@ export class GameManagerV2 {
 
       if (subInt.message.id == msg.id) {
         // Main message
-        console.debug("Input from main message");
         if (!subInt.isButton()) return;
 
         switch (subInt.customId) {
@@ -219,6 +218,7 @@ export class GameManagerV2 {
             {
               const defaultYaml = (await PlayerTable.findByPk(subInt.user.id))
                 ?.defaultCode;
+              // console.debug(defaultYaml);
               if (!defaultYaml) {
                 subInt.reply({
                   content:
@@ -233,8 +233,9 @@ export class GameManagerV2 {
                   ephemeral: true,
                 });
               } else {
-                launchBtn.setDisabled(this.yamlCount === 0);
                 addYaml(subInt.user.id, defaultYaml);
+                launchBtn.setDisabled(this.yamlCount === 0);
+                // console.debug(this._players);
 
                 subInt.reply({
                   content: "You joined with your default YAML.",
@@ -279,7 +280,7 @@ export class GameManagerV2 {
               subInt.deferReply();
 
               msg.edit({
-                content: `Game ${this.code} is now closed and is being generated.`,
+                content: `Game ${this.code} is now closed to new players and is being generated.`,
                 embeds: [],
                 components: [],
               });
@@ -315,15 +316,14 @@ export class GameManagerV2 {
         }
       } else if (subInt.message.reference?.messageId === msg.id) {
         // YAML response
-        console.debug("Input from YAML selector");
         if (subInt.isSelectMenu() && subInt.customId === "yaml") {
-          launchBtn.setDisabled(false);
           msg.edit({ components: [buttonRow] });
 
           console.debug(
             `Adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`
           );
           addYaml(subInt.user.id, subInt.values[0]);
+          launchBtn.setDisabled(this.yamlCount === 0);
           subInt.reply({
             content: `YAML ${subInt.values[0]} added to this game.`,
             ephemeral: true,
@@ -357,7 +357,7 @@ export class GameManagerV2 {
 
     const incomingYamls: [string, string][] = [];
     for (const user in this._players)
-      for (const yaml in this._players[user]) incomingYamls.push([user, yaml]);
+      for (const yaml of this._players[user]) incomingYamls.push([user, yaml]);
 
     const writeMsg = (
       msgContent: string | MessagePayload | InteractionReplyOptions
@@ -372,6 +372,7 @@ export class GameManagerV2 {
     const playerYamlList = await YamlManager.GetYamlsByCode(
       ...incomingYamls.map((i) => i[1])
     );
+    console.debug(incomingYamls, playerYamlList);
 
     await Promise.all(
       playerYamlList.map((i) =>
@@ -381,6 +382,8 @@ export class GameManagerV2 {
         )
       )
     );
+
+    this._state = GameState.Generating;
 
     await new Promise<string>((f, r) => {
       const pyApGenerate = spawn(
@@ -412,7 +415,10 @@ export class GameManagerV2 {
 
         const itemCount = /Filling the world with (\d+) items\./.exec(dataStr);
         if (itemCount && this._msg)
-          this._msg.edit(this._msg.content + ` This multiworld will have **${itemCount[1]} items**.`);
+          this._msg.edit(
+            this._msg.content +
+              ` This multiworld will have **${itemCount[1]} items**.`
+          );
 
         if (dataStr.includes("press enter to install it"))
           pyApGenerate.stdin.write("\n");
@@ -625,7 +631,7 @@ export class GameManagerV2 {
 
     const msg = await channel.send({
       content:
-        "Game ABCD is live!\n" +
+        `Game ${this.code} is live!\n` +
         "The host can send commands to the server either by selecting them from the list, or replying to this message. " +
         "To send a slash command, precede it with a period instead of a slash so that it doesn't get intercepted by Discord. " +
         "For instance: `.forfeit player`",
@@ -710,6 +716,7 @@ export class GameManagerV2 {
     apErr?.pipe(
       createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
     );
+    this._state = GameState.Running;
 
     const writeToServer = (text: string) => {
       apIn?.write(`${text}\n`);
@@ -718,14 +725,19 @@ export class GameManagerV2 {
     };
 
     const UpdateOutput = (() => {
-      let lastUpdate = Date.now();
+      let lastUpdate = 0;
       let lastTimestampUpdate = Date.now();
-      let timeout: NodeJS.Timeout | undefined;
-      const retval = (updateTimestamp = false) => {
+      let timeout: NodeJS.Timeout | undefined = undefined;
+      const retval = async (updateTimestamp = false) => {
         if (updateTimestamp) lastTimestampUpdate = Date.now();
         if (timeout || this._state !== GameState.Running) return;
+
         const deltaLastUpdate = Date.now() - lastUpdate - 1000;
-        if (deltaLastUpdate < 0) timeout = setTimeout(retval, -deltaLastUpdate);
+        if (deltaLastUpdate < 0)
+          timeout = setTimeout(() => {
+            timeout = undefined;
+            retval();
+          }, -deltaLastUpdate + 5);
         else {
           lastUpdate = Date.now();
           serverOutput.value = lastFiveLines.join("\n");
@@ -735,7 +747,6 @@ export class GameManagerV2 {
           msg.edit({
             embeds: [liveEmbed],
           });
-          timeout = undefined;
         }
       };
       return retval;
@@ -750,7 +761,7 @@ export class GameManagerV2 {
         // this filter removes the "Now that you are connected" message, which is unnecessary in server output
         .filter(
           (i) =>
-            !/^Notice \(Player .* in team \d+\) Now that you are connected,/.test(
+            !/^Notice \(Player .* in team \d+\): Now that you are connected,/.test(
               i
             )
         );
