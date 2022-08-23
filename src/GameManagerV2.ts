@@ -42,7 +42,7 @@ import {
   SystemHasMkfifo,
 } from "./core";
 import { GameTable, PlayerTable } from "./Sequelize";
-import { /*YamlListenerResult,*/ YamlManager } from "./YamlManager";
+import { YamlListenerResult, YamlManager } from "./YamlManager";
 
 const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
@@ -207,20 +207,22 @@ export class GameManagerV2 {
       });
     };
 
+    const addYaml = (userId: string, code: string) => {
+      if (!this._players[userId]) this._players[userId] = [code];
+      else this._players[userId].push(code);
+      UpdatePlayers();
+    };
+
+    const hasYaml = (userId: string, code: string) => {
+      if (this._players[userId]) return this._players[userId].includes(code);
+      else return false;
+    };
+
+    let { result, terminate } = await YamlManager.YamlListener(msg);
+
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (subInt.channelId !== msg.channelId) return;
       if (!(subInt.isButton() || subInt.isSelectMenu())) return;
-
-      const addYaml = (userId: string, code: string) => {
-        if (!this._players[userId]) this._players[userId] = [code];
-        else this._players[userId].push(code);
-        UpdatePlayers();
-      };
-
-      const hasYaml = (userId: string, code: string) => {
-        if (this._players[userId]) return this._players[userId].includes(code);
-        else return false;
-      };
 
       if (subInt.message.id == msg.id) {
         // Main message
@@ -299,9 +301,10 @@ export class GameManagerV2 {
                 components: [],
               });
               this._state = GameState.Generating;
-              this._client.off("interactionCreate", subInteractionHandler);
-
+              
+              terminate("gamelaunch");
               this.LaunchGame(subInt);
+              this._client.off("interactionCreate", subInteractionHandler);
             }
             break;
           case "cancel":
@@ -316,8 +319,9 @@ export class GameManagerV2 {
                 embeds: [],
                 components: [],
               });
-              this._state = GameState.Cancelled;
               // TODO: make sure this game gets cleaned up
+              this._state = GameState.Cancelled;
+              terminate("gamecancel");
               this._client.off("interactionCreate", subInteractionHandler);
             }
             break;
@@ -352,6 +356,36 @@ export class GameManagerV2 {
         console.debug("Unidentified message", subInt.message.id, msg.id);
       }
     };
+
+    const resultThen = async ({ retval, reason, user }: YamlListenerResult) => {
+      ({ result, terminate } = await YamlManager.YamlListener(msg));
+      if (!user) return;
+      switch (reason) {
+        case "gotyaml":
+          {
+            const yamlMgr = new YamlManager(this._client, user.id);
+            const [code] = await yamlMgr.AddYamls(retval[0]);
+            user.send(
+              `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`
+            );
+            addYaml(user.id, code);
+          }
+          break;
+        case "yamlerror":
+          user.send(
+            `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`
+          );
+          break;
+        case "notyaml":
+          user.send(
+            `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`
+          );
+          break;
+        default:
+          break;
+      }
+    };
+    result.then(resultThen);
 
     this._client.on("interactionCreate", subInteractionHandler);
 
@@ -670,6 +704,11 @@ export class GameManagerV2 {
                   "Gathers a player's items from everyone else's worlds.",
               },
               {
+                value: "hint",
+                label: "Request hint",
+                description: "Send a player a hint about an item.",
+              },
+              {
                 value: "exit",
                 label: "Close server",
                 description: "Closes the server.",
@@ -796,6 +835,14 @@ export class GameManagerV2 {
       if (subInt.channelId !== msg.channelId) return;
       if (!(subInt.isSelectMenu() || subInt.isModalSubmit())) return;
 
+      if (subInt.user.id !== this.hostId) {
+        subInt.reply({
+          content: "Only the game host can perform that action.",
+          ephemeral: true,
+        });
+        return;
+      }
+
       const modalPrompt = async (event: string) => {
         if (!subInt.isSelectMenu()) return;
         const modal = new ModalBuilder()
@@ -823,6 +870,29 @@ export class GameManagerV2 {
             msg.edit({ components: msg.components });
             modalPrompt(subInt.values[0]);
             break;
+          case "hint":
+            {
+              const modal = new ModalBuilder()
+                .setTitle("Specify user/item")
+                .setCustomId(`hint-${msg.id}`)
+                .setComponents(
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                      .setLabel("Who would you like to send a hint?")
+                      .setCustomId("target")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short),
+                    new TextInputBuilder()
+                      .setLabel("Which item do they want to hint for?")
+                      .setCustomId("item")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short)
+                  )
+                );
+
+              await subInt.showModal(modal);
+            }
+            break;
           case "exit":
             writeToServer("/exit");
             subInt.reply({
@@ -848,12 +918,28 @@ export class GameManagerV2 {
           console.debug("Unidentified reference", msgId, msg.id);
           return;
         }
-        const slotName = subInt.fields.getTextInputValue("target");
-        subInt.reply({
-          content: `Sending command to ${event} ${slotName}.`,
-          ephemeral: true,
-        });
-        writeToServer(`/${event} ${slotName}`);
+        switch (event) {
+          case "collect":
+          case "release":
+            {
+              const slotName = subInt.fields.getTextInputValue("target");
+              subInt.reply({
+                content: `Sending command to ${event} ${slotName}.`,
+                ephemeral: true,
+              });
+              writeToServer(`/${event} ${slotName}`);
+            }
+            break;
+          case "hint": {
+            const slotName = subInt.fields.getTextInputValue("target");
+            const itemName = subInt.fields.getTextInputValue("item");
+            subInt.reply({
+              content: `Sending hint for ${itemName} to ${slotName}.`,
+              ephemeral: true,
+            });
+            writeToServer(`/${event} ${slotName} ${itemName}`);
+          }
+        }
       }
     };
 
