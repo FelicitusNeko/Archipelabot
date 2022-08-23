@@ -54,6 +54,9 @@ export interface YamlListenerResult {
    * Otherwise, should be empty.
    */
   retval: YamlData[];
+
+  /** The user who sent the YAML. */
+  user: DiscordUser | null;
 }
 
 /** The return value for {@link YamlManager.YamlListener}. */
@@ -72,6 +75,8 @@ export class YamlManager {
   private readonly _client: DiscordClient;
   /** The user to which this YAML manager pertains. */
   private readonly _user: DiscordUser;
+  /** The path to the user's YAMLs. */
+  public readonly yamlPath: string;
 
   /** The client's user ID, if it is available. If not, returns an empty string. */
   public get clientId() {
@@ -82,15 +87,12 @@ export class YamlManager {
     return this._user.id;
   }
 
-  private get userDir() {
-    return pathJoin("yamls", this.userId);
-  }
-
   public constructor(client: DiscordClient, userId: string) {
     this._client = client;
     const user = this._client.users.cache.get(userId);
     if (!user) throw new Error(`User ${userId} not found`);
     this._user = user;
+    this.yamlPath = pathJoin("yamls", user.id);
   }
 
   /**
@@ -194,7 +196,7 @@ export class YamlManager {
               files: [
                 {
                   attachment: readFileSync(
-                    pathJoin("yamls", this.userId, `${curEntry.filename}.yaml`)
+                    pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)
                   ),
                   name: `${curEntry.filename}.yaml`,
                 },
@@ -266,9 +268,7 @@ export class YamlManager {
                 { defaultCode: null },
                 { where: { defaultCode: curEntry.code } }
               ),
-              unlink(
-                pathJoin("yamls", curEntry.userId, `${curEntry.filename}.yaml`)
-              ),
+              unlink(pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)),
             ]);
 
             (yamlRow.components[0] as SelectMenuBuilder).setOptions(
@@ -394,14 +394,14 @@ export class YamlManager {
 
     const retval: string[] = [];
 
-    MkdirIfNotExist(this.userDir);
+    MkdirIfNotExist(this.yamlPath);
     for (const index in yamls) {
       const code = GenerateLetterCode([...existingCodes, ...retval]);
 
       const yaml = yamls[index];
       await Promise.all([
         writeFile(
-          pathJoin(this.userDir, `${yaml.msgId}-${index}.yaml`),
+          pathJoin(this.yamlPath, `${yaml.msgId}-${index}.yaml`),
           yaml.data
         ),
         YamlTable.create({
@@ -434,7 +434,7 @@ export class YamlManager {
       throw new Error(`YAML ${code} does not belong to this user`);
 
     await Promise.all([
-      writeFile(pathJoin(this.userDir, `${yaml.msgId}-u.yaml`), yaml.data),
+      writeFile(pathJoin(this.yamlPath, `${yaml.msgId}-u.yaml`), yaml.data),
       YamlTable.update(
         {
           filename: `${yaml.msgId}-u`,
@@ -448,7 +448,7 @@ export class YamlManager {
       ),
     ]);
 
-    return unlink(pathJoin(this.userDir, `${existingYaml.filename}.yaml`));
+    return unlink(pathJoin(this.yamlPath, `${existingYaml.filename}.yaml`));
   }
 
   /**
@@ -521,10 +521,12 @@ export class YamlManager {
       time,
     });
 
+    let user: DiscordUser | null = null;
     const retval: YamlData[] = [];
     const errors: YamlData[] = [];
 
     msgCollector.on("collect", (msgIn) => {
+      user = msgIn.author;
       const yamls = msgIn.attachments.filter(
         (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
       );
@@ -561,6 +563,7 @@ export class YamlManager {
         f({
           reason,
           retval,
+          user,
         });
       });
     });
