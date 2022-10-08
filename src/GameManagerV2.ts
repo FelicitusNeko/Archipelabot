@@ -40,6 +40,7 @@ import {
   isPortAvailable,
   MkdirIfNotExist,
   SystemHasMkfifo,
+  VersionSpec,
 } from "./core";
 import { GameTable, PlayerTable } from "./Sequelize";
 import { YamlListenerResult, YamlManager } from "./YamlManager";
@@ -301,7 +302,7 @@ export class GameManagerV2 {
                 components: [],
               });
               this._state = GameState.Generating;
-              
+
               terminate("gamelaunch");
               this.LaunchGame(subInt);
               this._client.off("interactionCreate", subInteractionHandler);
@@ -709,6 +710,11 @@ export class GameManagerV2 {
                 description: "Send a player a hint about an item.",
               },
               {
+                value: "send",
+                label: "Send an item",
+                description: "Send a player an item.",
+              },
+              {
                 value: "exit",
                 label: "Close server",
                 description: "Closes the server.",
@@ -893,6 +899,29 @@ export class GameManagerV2 {
               await subInt.showModal(modal);
             }
             break;
+          case "send":
+            {
+              const modal = new ModalBuilder()
+                .setTitle("Specify user/item")
+                .setCustomId(`send-${msg.id}`)
+                .setComponents(
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                      .setLabel("Who would you like to send an item?")
+                      .setCustomId("target")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short),
+                    new TextInputBuilder()
+                      .setLabel("Which item do you wish to send?")
+                      .setCustomId("item")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short)
+                  )
+                );
+
+              await subInt.showModal(modal);
+            }
+            break;
           case "exit":
             writeToServer("/exit");
             subInt.reply({
@@ -930,15 +959,28 @@ export class GameManagerV2 {
               writeToServer(`/${event} ${slotName}`);
             }
             break;
-          case "hint": {
-            const slotName = subInt.fields.getTextInputValue("target");
-            const itemName = subInt.fields.getTextInputValue("item");
-            subInt.reply({
-              content: `Sending hint for ${itemName} to ${slotName}.`,
-              ephemeral: true,
-            });
-            writeToServer(`/${event} ${slotName} ${itemName}`);
-          }
+          case "hint":
+            {
+              const slotName = subInt.fields.getTextInputValue("target");
+              const itemName = subInt.fields.getTextInputValue("item");
+              subInt.reply({
+                content: `Sending hint for ${itemName} to ${slotName}.`,
+                ephemeral: true,
+              });
+              writeToServer(`/${event} ${slotName} ${itemName}`);
+            }
+            break;
+          case "send":
+            {
+              const slotName = subInt.fields.getTextInputValue("target");
+              const itemName = subInt.fields.getTextInputValue("item");
+              subInt.reply({
+                content: `Sending item ${itemName} to ${slotName}.`,
+                ephemeral: true,
+              });
+              writeToServer(`/${event} ${slotName} ${itemName}`);
+            }
+            break;
         }
       }
     };
@@ -1078,5 +1120,17 @@ export class GameManagerV2 {
       where: { code: { [SqlOp.in]: [...gamesToPurge] } },
     });
     interaction?.followUp(`${gamesToPurge.size} game(s) purged.`);
+  }
+
+  /**
+   * Compares two {@link VersionSpec}s.
+   * @param lhs The first version to compare.
+   * @param rhs The second version to compare.
+   * @returns 0 if equal; otherwise, returns negative if `lhs` is older, and positive if `lhs` is newer.
+   */
+  static CompareVersion(lhs: VersionSpec, rhs: VersionSpec) {
+    for (const x of [0, 1, 2])
+      if (lhs[x] !== rhs[x]) return lhs[x] > rhs[x] ? 1 : -1;
+    return 0;
   }
 }
