@@ -77,8 +77,10 @@ export interface YamlData {
   data: string;
 }
 
+export type VersionSpec = [number, number, number];
+
 export interface GameList {
-  version?: [number, number, number];
+  version?: VersionSpec;
   games: string[];
   testgames?: string[];
   broken?: string[];
