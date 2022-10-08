@@ -1,4 +1,5 @@
 {
+  "version": [0, 3, 5],
   "games": [
     "A Link to the Past",
     "Factorio",
@@ -24,15 +25,7 @@
     "Dark Souls III",
     "Donkey Kong Country 3"
   ],
-  "testgames": [
-  ],
-  "upcoming": [
-    "Undertale",
-    "Freddy Fazbear's Pizzeria Simulator"
-  ],
-  "support": [
-    "ChecksFinder",
-    "ArchipIDLE",
-    "Bumper Stickers"
-  ]
+  "testgames": ["Bumper Stickers"],
+  "upcoming": ["Undertale", "Freddy Fazbear's Pizzeria Simulator"],
+  "support": ["ChecksFinder", "ArchipIDLE"]
 }

@@ -78,6 +78,7 @@ export interface YamlData {
 }
 
 export interface GameList {
+  version?: [number, number, number];
   games: string[];
   testgames?: string[];
   broken?: string[];
