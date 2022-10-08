@@ -1,6 +1,5 @@
 import {
   Client as DiscordClient,
-  // Message as DiscordMessage,
   Interaction as DiscordInteraction,
   User as DiscordUser,
   CommandInteraction,
@@ -12,7 +11,6 @@ import {
   ApplicationCommandOptionType,
   InteractionType,
   MessageType,
-  ChannelType,
   ButtonStyle,
   userMention,
   SelectMenuBuilder,
@@ -32,7 +30,6 @@ import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import {
   Command,
-  GameState,
   GenerateLetterCode,
   GetFile,
   isPortAvailable,
