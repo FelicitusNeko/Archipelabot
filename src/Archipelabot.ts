@@ -41,7 +41,6 @@ import {
   SystemHasScreen,
   YamlData,
 } from "./core";
-import { GameManager } from "./GameManager";
 import { GameManagerV2 } from "./GameManagerV2";
 import { YamlManager } from "./YamlManager";
 
@@ -53,8 +52,6 @@ export class Archipelabot {
   /** The list of commands accepted by the bot. */
   private _cmds: Command[];
 
-  /** The list of games currently being used. */
-  private _games: GameManager[] = [];
   /** The list of games currently being used. */
   private _gamesv2: GameManagerV2[] = [];
 
@@ -74,47 +71,26 @@ export class Archipelabot {
         run: this.cmdYaml,
       },
       {
-        name: "apgame",
-        description: "Start and manage Archipelago games",
+        name: "apstart",
+        description: "Start a new Archipelago multiworld.",
+        type: ApplicationCommandType.ChatInput,
+        run: this.cmdAPStartV2,
+      },
+      {
+        name: "apresume",
+        description: "Resume an existing Archipelago multiworld.",
         type: ApplicationCommandType.ChatInput,
         options: [
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "subcommand",
-            description: "What game command to run.",
-            choices: [
-              { name: "Start", value: "start" },
-              { name: "Launch", value: "launch" },
-              { name: "Cancel", value: "cancel" },
-            ],
-            required: true,
-          },
           {
             type: ApplicationCommandOptionType.String,
             name: "code",
-            description:
-              "The game code to act upon, if any. Omit if launching a game currently being recruited.",
-            required: false,
-          },
-        ],
-        run: this.cmdAPGame,
-      },
-      {
-        name: "aptestgame",
-        description: "Start Archipelago test games (use /apgame to manage)",
-        type: ApplicationCommandType.ChatInput,
-        options: [
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "subcommand",
-            description: "What game command to run.",
-            choices: [{ name: "Start", value: "start" }],
+            description: "The four-letter code for the game to resume.",
             required: true,
           },
         ],
-        run: (i) => this.cmdAPGame(i, true),
+        run: this.cmdAPResumeV2,
       },
-      {
+    {
         name: "admin",
         description: "Administrative functions (must be a bot admin to use)",
         type: ApplicationCommandType.ChatInput,
@@ -127,6 +103,7 @@ export class Archipelabot {
               { name: "Clean YAMLs", value: "cleanyaml" },
               { name: "Purge games older than 2 weeks", value: "purgegame" },
               { name: "Send YAML to user", value: "giveyaml" },
+              { name: "Start a test game", value: "testgame" }
             ],
             required: true,
           },
@@ -142,7 +119,7 @@ export class Archipelabot {
       {
         name: "hello",
         description:
-          'Replies "hello". Basically just to make sure the bot is running.',
+          'Replies "hello", basically just to make sure the bot is running.',
         type: ApplicationCommandType.ChatInput,
         run: async (interaction) => {
           interaction.followUp({
@@ -157,26 +134,6 @@ export class Archipelabot {
     if (ENABLE_TEST === "1") {
       console.info("Enabling test suite");
       this._cmds.push(
-        {
-          name: "apstart",
-          description: "[Beta] Start a new Archipelago multiworld.",
-          type: ApplicationCommandType.ChatInput,
-          run: this.cmdAPStartV2,
-        },
-        {
-          name: "apresume",
-          description: "[Beta] Resume an existing Archipelago multiworld.",
-          type: ApplicationCommandType.ChatInput,
-          options: [
-            {
-              type: ApplicationCommandOptionType.String,
-              name: "code",
-              description: "The four-letter code for the game to resume.",
-              required: true,
-            },
-          ],
-          run: this.cmdAPResumeV2,
-        },
         {
           name: "test",
           description: "Testing commands",
@@ -375,141 +332,11 @@ export class Archipelabot {
     this._client.on("interactionCreate", subInteractionHandler);
   }
 
-  cmdAPGame = async (interaction: CommandInteraction, isTestGame = false) => {
-    if (isTestGame && interaction.user.id !== "475120074621976587") {
-      interaction.followUp({
-        ephemeral: true,
-        content: "You're not a bot admin!",
-      });
-    } else if (
-      !interaction.guild ||
-      !interaction.channel ||
-      interaction.channel.type !== ChannelType.GuildText
-    ) {
-      interaction.followUp({
-        ephemeral: true,
-        content:
-          "A game currently can only be organized in a text channel of a server.",
-      });
-    } else {
-      const {
-        guildId,
-        user: { id: hostId },
-      } = interaction;
-      switch (interaction.options.get("subcommand", true).value as string) {
-        case "start":
-          {
-            const gameHere = this._games.find((i) => i.guildId === guildId);
-            if (gameHere) {
-              interaction.followUp(
-                "There is already a game being organized on this server!"
-              );
-            } else {
-              const game = await GameManager.NewGame(this._client, isTestGame);
-              this._games.push(game);
-              await game.RecruitGame(interaction);
-              //console.debug(game);
-            }
-          }
-          break;
-
-        case "launch":
-          {
-            const code = interaction.options.get("code", false);
-            if (code && typeof code.value === "string") {
-              const codeUpper = code.value.toUpperCase();
-              //const gameData = await GameTable.findByPk(codeUpper);
-              const creationData = await GameManager.GetCreationData(codeUpper);
-
-              if (creationData) {
-                if (interaction.guildId !== creationData.guild) {
-                  interaction.followUp(
-                    `Game ${codeUpper} was not created on this server.`
-                  );
-                } else if (interaction.user.id !== creationData.host) {
-                  interaction.followUp(
-                    `This is not your game! Game ${codeUpper} was created by ${userMention(
-                      creationData.host
-                    )}.`
-                  );
-                } else {
-                  interaction.followUp(
-                    `Attempting to launch game ${codeUpper}.`
-                  );
-                  const game = await GameManager.fromCode(
-                    this._client,
-                    codeUpper
-                  );
-                  this._games.push(game);
-                  game.RunGame(interaction.channelId);
-                }
-              } else {
-                interaction.followUp(`Game code ${codeUpper} not found.`);
-              }
-            } else {
-              const game = this._games.find(
-                (i) => i.guildId === guildId && i.state === GameState.Assembling
-              );
-              if (!game) {
-                interaction.followUp({
-                  ephemeral: true,
-                  content: "No game is currently being organized!",
-                });
-              } else if (game.hostId !== hostId) {
-                interaction.followUp({
-                  ephemeral: true,
-                  content: "You're not the person who launched this event!",
-                });
-              } else if (game.playerCount === 0) {
-                interaction.followUp({
-                  ephemeral: true,
-                  content:
-                    "Nobody has signed up for this game yet! Either wait for signups or cancel.",
-                });
-              } else
-                game.CreateGame(interaction).then(() => {
-                  this._games = this._games.filter((i) => i !== game);
-                });
-            }
-          }
-          break;
-
-        case "cancel":
-          {
-            console.debug(this._games.map((i) => i.guildId));
-            const game = this._games.find(
-              (i) => i.guildId === guildId && i.state === GameState.Assembling
-            );
-            if (!game)
-              interaction.followUp({
-                ephemeral: true,
-                content: "No game is currently being organized!",
-              });
-            else if (game.CancelGame(interaction))
-              this._games = this._games.filter((i) => i !== game);
-          }
-          break;
-
-        default:
-          interaction.followUp({
-            ephemeral: true,
-            content:
-              "I don't recognize that subcommand. (valid options: start, launch, cancel)",
-          });
-          console.warn(
-            "Unknown subcommand",
-            interaction.options.get("subcommand", true).value
-          );
-          break;
-      }
-    }
-  };
-
   cmdAPStartV2 = async (
     interaction: CommandInteraction,
     isTestGame = false
   ) => {
-    const gameHere = this._games.find((i) => i.guildId === interaction.guildId);
+    const gameHere = this._gamesv2.find((i) => i.guildId === interaction.guildId);
     if (gameHere) {
       interaction.followUp(
         "There is already a game being organized on this server!"
@@ -563,7 +390,7 @@ export class Archipelabot {
         YamlManager.CleanupYamls(interaction);
         break;
       case "purgegame":
-        GameManager.CleanupGames(interaction);
+        GameManagerV2.CleanupGames(interaction);
         break;
       case "giveyaml":
         {
@@ -643,6 +470,8 @@ export class Archipelabot {
           }
         }
         break;
+      case "testgame":
+        return this.cmdAPStartV2(interaction, true);
       default:
         interaction.followUp(
           "Unrecognized subcommand. That shouldn't happen..."
