@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "fs";
-import { readdir, unlink, writeFile } from "fs/promises";
+import { readdir, readFile, unlink, writeFile } from "fs/promises";
 import { basename, join as pathJoin, sep as pathSep } from "path";
 
 import {
@@ -19,6 +19,7 @@ import {
   userMention,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
+import * as YAML from "yaml";
 
 import {
   GetFile,
@@ -29,6 +30,7 @@ import {
   GameFunctionState,
   GetGameFunctionState,
   GetStdFunctionStateErrorMsg,
+  VersionSpec,
 } from "./core";
 import { PlayerTable, YamlTable } from "./Sequelize";
 
@@ -741,5 +743,24 @@ export class YamlManager {
       if (!yaml) return "❓";
       return YamlManager.GetEmoji(yaml.games);
     });
+  }
+
+  static async GetYamlVersionByCode(code: string): Promise<VersionSpec | null> {
+    return YamlTable.findByPk(code)
+      .then((yaml) => {
+        if (!yaml) return null;
+        return readFile(
+          pathJoin("yamls", yaml.userId, `${yaml.filename}.yaml`)
+        );
+      })
+      .then((file) => {
+        if (!file) return null;
+        const yaml = YAML.parse(file.toString());
+        if (!yaml.requires || !yaml.requires.version) return null;
+        return yaml.requires.version
+          .split(".")
+          .map((i: string) => Number.parseInt(i));
+      })
+      .catch(() => null);
   }
 }
