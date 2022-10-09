@@ -387,6 +387,7 @@ const GetStdFunctionStateErrorMsg = (
   }
 };
 export {
+  GetGameList,
   SystemHasScreen,
   SystemHasMkfifo,
   MkdirIfNotExist,
