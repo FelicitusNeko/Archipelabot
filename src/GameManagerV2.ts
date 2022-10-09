@@ -482,9 +482,8 @@ export class GameManagerV2 {
     };
 
     const resultThen = async ({ retval, reason, user }: YamlListenerResult) => {
-      ({ result, terminate } = await YamlManager.YamlListener(msg));
-      if (!user) return;
-      switch (reason) {
+      let autorestart = false;
+      if (user) switch (reason) {
         case "gotyaml":
           {
             const yamlMgr = new YamlManager(this._client, user.id);
@@ -493,21 +492,25 @@ export class GameManagerV2 {
               `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`
             );
             addYaml(user.id, code);
+            autorestart = true;
           }
           break;
         case "yamlerror":
           user.send(
             `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`
           );
+          autorestart = true;
           break;
         case "notyaml":
           user.send(
             `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`
           );
+          autorestart = true;
           break;
         default:
           break;
       }
+      if (autorestart) ({ result, terminate } = await YamlManager.YamlListener(msg));
     };
     result.then(resultThen);
 
