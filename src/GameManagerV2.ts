@@ -214,10 +214,10 @@ export class GameManagerV2 {
     const addYaml = (userId: string, code: string) => {
       if (!this._players[userId]) this._players[userId] = [code];
       else this._players[userId].push(code);
-      UpdatePlayers();
+      return true;
     };
 
-    const killQueue = new Set<() => void>();
+    //const killQueue = new Set<() => void>();
 
     const addYamlSafe = async (
       userId: string,
@@ -225,60 +225,62 @@ export class GameManagerV2 {
       subInt: ButtonInteraction | SelectMenuInteraction,
       isDefault = false
     ) => {
+      let olderYaml = false;
       const yamlVer = await YamlManager.GetYamlVersionByCode(code);
       if (apVer && yamlVer) {
         switch (GameManagerV2.CompareVersion(yamlVer, apVer)) {
           case -1:
-            {
-              // the YAML is older than the current AP version
-              const confMsg = await subInt.reply({
-                content: `The selected YAML is for Archipelago version ${yamlVer.join(
-                  "."
-                )}, which is older than the current version (${apVer.join(
-                  "."
-                )}). This may negatively affect game generation. Use this YAML anyway? (If not, just dismiss this message.)`,
-                components: [
-                  new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder()
-                      .setCustomId(`${subInt.user.id}-${code}-confirm`)
-                      .setLabel("Yes, use this YAML")
-                  ),
-                ],
-                ephemeral: true,
-              });
-              let killer = () => {/*nope*/};
-              const confirmInteractionHandler = (
-                confInt: DiscordInteraction
-              ) => {
-                if (!confInt.isButton()) return;
-                if (confInt.message.reference?.messageId === confMsg.id) {
-                  addYaml(userId, code);
-                  launchBtn.setDisabled(this.yamlCount === 0);
-                  confInt.reply("Okay, this YAML will be used in the game.");
-                  console.debug(
-                    `${confInt.user.username}#${
-                      confInt.user.discriminator
-                    } is using YAML ${code}, which is for an older version (${yamlVer.join(
-                      "."
-                    )})`
-                  );
-                  killQueue.delete(killer);
-                  this._client.off(
-                    "interactionCreate",
-                    confirmInteractionHandler
-                  );
-                }
-              };
-              killer = () => {
-                this._client.off(
-                  "interactionCreate",
-                  confirmInteractionHandler
-                );
-              };
+            olderYaml = true;
+            // {
+            //   // the YAML is older than the current AP version
+            //   const confMsg = await subInt.reply({
+            //     content: `The selected YAML is for Archipelago version ${yamlVer.join(
+            //       "."
+            //     )}, which is older than the current version (${apVer.join(
+            //       "."
+            //     )}). This may negatively affect game generation. Use this YAML anyway? (If not, just dismiss this message.)`,
+            //     components: [
+            //       new ActionRowBuilder<ButtonBuilder>().addComponents(
+            //         new ButtonBuilder()
+            //           .setCustomId(`${subInt.user.id}-${code}-confirm`)
+            //           .setLabel("Yes, use this YAML")
+            //       ),
+            //     ],
+            //     ephemeral: true,
+            //   });
+            //   let killer = () => {/*nope*/};
+            //   const confirmInteractionHandler = (
+            //     confInt: DiscordInteraction
+            //   ) => {
+            //     if (!confInt.isButton()) return;
+            //     if (confInt.message.reference?.messageId === confMsg.id) {
+            //       addYaml(userId, code);
+            //       launchBtn.setDisabled(this.yamlCount === 0);
+            //       confInt.reply("Okay, this YAML will be used in the game.");
+            //       console.debug(
+            //         `${confInt.user.username}#${
+            //           confInt.user.discriminator
+            //         } is using YAML ${code}, which is for an older version (${yamlVer.join(
+            //           "."
+            //         )})`
+            //       );
+            //       killQueue.delete(killer);
+            //       this._client.off(
+            //         "interactionCreate",
+            //         confirmInteractionHandler
+            //       );
+            //     }
+            //   };
+            //   killer = () => {
+            //     this._client.off(
+            //       "interactionCreate",
+            //       confirmInteractionHandler
+            //     );
+            //   };
 
-              this._client.on("interactionCreate", confirmInteractionHandler);
-              killQueue.add(killer);
-            }
+            //   this._client.on("interactionCreate", confirmInteractionHandler);
+            //   killQueue.add(killer);
+            // }
             break;
           case 1: // the YAML is newer than the current AP version
             subInt.reply(
@@ -288,16 +290,40 @@ export class GameManagerV2 {
                 "."
               )}). This would cause generation to fail. Please select a different YAML.`
             );
-            return;
+            return false;
         }
       }
       addYaml(userId, code);
       subInt.reply({
         content: `You joined with ${
           isDefault ? "your default YAML." : `YAML code ${code}`
+        }.${
+          olderYaml
+            ? ` Please be advised that this YAML is for an older version of Archipelago (${yamlVer?.join(
+                "."
+              )}), which may cause generation issues.`
+            : ""
         }`,
         ephemeral: true,
       });
+      // TODO: see if we can provide a better confirmation for this
+      if (yamlVer && olderYaml)
+        console.debug(
+          `${subInt.user.username}#${
+            subInt.user.discriminator
+          } is using YAML ${code}, which is for an older version (${yamlVer.join(
+            "."
+          )})`
+        );
+      else
+        console.debug(
+          `Adding ${isDefault ? "default " : ""}YAML ${code} for ${
+            subInt.user.username
+          }#${subInt.user.discriminator}`
+        );
+      launchBtn.setDisabled(this.yamlCount === 0);
+      UpdatePlayers();
+      return true;
     };
 
     const hasYaml = (userId: string, code: string) => {
@@ -335,16 +361,8 @@ export class GameManagerV2 {
                 });
               } else {
                 addYamlSafe(subInt.user.id, defaultYaml, subInt, true);
-                launchBtn.setDisabled(this.yamlCount === 0);
-
-                // subInt.reply({
-                //   content: "You joined with your default YAML.",
-                //   ephemeral: true,
-                // });
-                console.debug(
-                  `Adding default for ${subInt.user.username}#${subInt.user.discriminator}`
-                );
-                UpdatePlayers();
+                // launchBtn.setDisabled(this.yamlCount === 0);
+                // UpdatePlayers();
               }
             }
             break;
@@ -411,7 +429,7 @@ export class GameManagerV2 {
             break;
           default:
             subInt.reply({
-              content: `I don't know what "${subInt.customId}" means.`,
+              content: `I don't know what "${subInt.customId}" means. This is probably a bug.`,
               ephemeral: true,
             });
             break;
@@ -426,12 +444,12 @@ export class GameManagerV2 {
           );
           //addYaml(subInt.user.id, subInt.values[0]);
           addYamlSafe(subInt.user.id, subInt.values[0], subInt);
-          launchBtn.setDisabled(this.yamlCount === 0);
-          UpdatePlayers();
-          subInt.reply({
-            content: `YAML ${subInt.values[0]} added to this game.`,
-            ephemeral: true,
-          });
+          // launchBtn.setDisabled(this.yamlCount === 0);
+          // UpdatePlayers();
+          // subInt.reply({
+          //   content: `YAML ${subInt.values[0]} added to this game.`,
+          //   ephemeral: true,
+          // });
         }
       } else {
         subInt.reply({
