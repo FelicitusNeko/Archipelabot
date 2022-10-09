@@ -30,6 +30,7 @@ import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import {
   Command,
+  GameState,
   GenerateLetterCode,
   GetFile,
   isPortAvailable,
@@ -50,7 +51,8 @@ export class Archipelabot {
   private _cmds: Command[];
 
   /** The list of games currently being used. */
-  private _gamesv2: GameManagerV2[] = [];
+  //private _gamesv2: GameManagerV2[] = [];
+  private _gamesv2 = new Set<GameManagerV2>();
 
   /** The client's user ID, if it is available. If not, returns an empty string. */
   public get clientId(): string {
@@ -333,14 +335,15 @@ export class Archipelabot {
     interaction: CommandInteraction,
     isTestGame = false
   ) => {
-    const gameHere = this._gamesv2.find((i) => i.guildId === interaction.guildId);
+    const gameHere = [...this._gamesv2].find((i) => i.guildId === interaction.guildId);
     if (gameHere) {
       interaction.followUp(
         "There is already a game being organized on this server!"
       );
     } else {
       const game = await GameManagerV2.NewGame(this._client, isTestGame);
-      this._gamesv2.push(game);
+      this._gamesv2.add(game);
+      game.onChangeState(this.onChangeState);
       await game.RecruitGame(interaction);
     }
   };
@@ -365,7 +368,8 @@ export class Archipelabot {
         } else {
           interaction.followUp(`Attempting to launch game ${codeUpper}.`);
           const game = await GameManagerV2.fromCode(this._client, codeUpper);
-          this._gamesv2.push(game);
+          this._gamesv2.add(game);
+          game.onChangeState(this.onChangeState);
           game.RunGame(interaction.channelId);
         }
       } else interaction.followUp(`Game code ${codeUpper} not found.`);
@@ -925,4 +929,8 @@ export class Archipelabot {
 
     this._client.on("interactionCreate", subInteractionHandler);
   };
+
+  onChangeState = (game:GameManagerV2, state:GameState) => {
+    if (state >= GameState.Stopped) this._gamesv2.delete(game);
+  }
 }

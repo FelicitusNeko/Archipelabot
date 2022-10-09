@@ -51,6 +51,8 @@ const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
 type PlayersV3 = Record<string, string[]>;
 
+export type ChangeStateListener = (game:GameManagerV2, g: GameState) => void;
+
 /** The interface for creating and managing games. */
 export class GameManagerV2 {
   /** The Discord API client interface. */
@@ -74,6 +76,8 @@ export class GameManagerV2 {
   /** The players for this game. */
   private _players: PlayersV3 = {};
 
+  private _changeStateListeners = new Set<ChangeStateListener>();
+
   /** The client's user ID, if it is available. If not, returns an empty string. */
   public get clientId() {
     return this._client && this._client.user ? this._client.user.id : "";
@@ -85,6 +89,11 @@ export class GameManagerV2 {
   /** The current state of the game. */
   public get state() {
     return this._state;
+  }
+  private set state(state) {
+    if (state !== this._state)
+      for (const listener of [...this._changeStateListeners]) listener(this, state);
+    this._state = state;
   }
   /** The snowflake for the server this game is running on. */
   public get guildId() {
@@ -129,8 +138,20 @@ export class GameManagerV2 {
       this._hostId = existingGame.userId;
       this._filename = existingGame.filename;
       // TODO: make Running bool into gameState integer
-      if (existingGame.active) this._state = GameState.Running;
+      if (existingGame.active) this.state = GameState.Running;
     }
+  }
+
+  public onChangeState(listener: ChangeStateListener) {
+    return this._changeStateListeners.add(listener);
+  }
+
+  public offChangeState(listener?: ChangeStateListener) {
+    if (!listener) {
+      if (this._changeStateListeners.size === 0) return false;
+      this._changeStateListeners.clear();
+      return true;
+    } else return this._changeStateListeners.delete(listener);
   }
 
   /**
@@ -402,7 +423,7 @@ export class GameManagerV2 {
                 embeds: [],
                 components: [],
               });
-              this._state = GameState.Generating;
+              this.state = GameState.Generating;
 
               terminate("gamelaunch");
               this.LaunchGame(subInt);
@@ -422,7 +443,7 @@ export class GameManagerV2 {
                 components: [],
               });
               // TODO: make sure this game gets cleaned up
-              this._state = GameState.Cancelled;
+              this.state = GameState.Cancelled;
               terminate("gamecancel");
               this._client.off("interactionCreate", subInteractionHandler);
             }
@@ -492,7 +513,7 @@ export class GameManagerV2 {
 
     this._client.on("interactionCreate", subInteractionHandler);
 
-    this._state = GameState.Assembling;
+    this.state = GameState.Assembling;
   }
 
   /**
@@ -535,7 +556,7 @@ export class GameManagerV2 {
       )
     );
 
-    this._state = GameState.Generating;
+    this.state = GameState.Generating;
 
     await new Promise<string>((f, r) => {
       const pyApGenerate = spawn(
@@ -706,7 +727,7 @@ export class GameManagerV2 {
           active: false,
         });
 
-        this._state = GameState.Ready;
+        this.state = GameState.Ready;
         return this.RunGame();
       })
       .catch((e) => {
@@ -719,7 +740,7 @@ export class GameManagerV2 {
             }),
           ],
         });
-        this._state = GameState.GenerationFailed;
+        this.state = GameState.GenerationFailed;
       });
   }
 
@@ -878,7 +899,7 @@ export class GameManagerV2 {
     apErr?.pipe(
       createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
     );
-    this._state = GameState.Running;
+    this.state = GameState.Running;
 
     const writeToServer = (text: string) => {
       apIn?.write(`${text}\n`);
@@ -1114,7 +1135,7 @@ export class GameManagerV2 {
       GameTable.update({ active: false }, { where: { code: this._code } });
       this._client.off("interactionCreate", subInteractionHandler);
       msgCollector.stop("serverclose");
-      this._state = GameState.Stopped;
+      this.state = GameState.Stopped;
 
       const pathprefix = pathJoin(gamePath, `${this.code}-std`);
       for (const pipe of ["in", "out", "err"])
