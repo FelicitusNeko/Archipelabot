@@ -523,6 +523,7 @@ export class YamlManager {
       time,
     });
 
+    let running = true;
     let user: DiscordUser | null = null;
     const retval: YamlData[] = [];
     const errors: YamlData[] = [];
@@ -536,7 +537,8 @@ export class YamlManager {
       else {
         Promise.all(yamls.map((i) => GetFile(i.url)))
           .then(async (yamlList) => {
-            console.debug(yamlList);
+            running = false;
+            //console.debug(yamlList);
             for (const yamlStr of yamlList) {
               const validate = QuickValidateYaml(yamlStr);
               validate.msgId = msgIn.id;
@@ -561,7 +563,10 @@ export class YamlManager {
     });
 
     const result = new Promise<YamlListenerResult>((f) => {
+      running = false;
       msgCollector.on("end", (_collected, reason) => {
+        console.debug(`📪 YAML listener closed on msg id ${msg.id}`);
+
         f({
           reason,
           retval,
@@ -570,7 +575,11 @@ export class YamlManager {
       });
     });
 
-    const terminate = (reason?: string) => msgCollector.stop(reason);
+    const terminate = (reason?: string) => {
+      if (running) msgCollector.stop(reason);
+    }
+
+    console.debug(`📭 YAML listener opened on msg id ${msg.id}`);
 
     return {
       result,
