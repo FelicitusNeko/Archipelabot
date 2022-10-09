@@ -563,10 +563,14 @@ export class YamlManager {
     });
 
     const result = new Promise<YamlListenerResult>((f) => {
-      running = false;
-      msgCollector.on("end", (_collected, reason) => {
-        console.debug(`📪 YAML listener closed on msg id ${msg.id}`);
-
+      msgCollector.on("end", (_, reason) => {
+        running = false;
+        console.debug(
+          reason === "gotyaml"
+            ? "📫"
+            : "📪" +
+                ` YAML listener closed with code ${reason} on msg id ${msg.id}`
+        );
         f({
           reason,
           retval,
@@ -577,7 +581,7 @@ export class YamlManager {
 
     const terminate = (reason?: string) => {
       if (running) msgCollector.stop(reason);
-    }
+    };
 
     console.debug(`📭 YAML listener opened on msg id ${msg.id}`);
 
