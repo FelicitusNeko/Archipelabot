@@ -36,6 +36,7 @@ import { Op as SqlOp } from "sequelize";
 import { mkfifoSync } from "mkfifo";
 
 import {
+  GameFunctionState,
   GameState,
   GenerateLetterCode,
   GetGameList,
@@ -389,11 +390,13 @@ export class GameManagerV2 {
             break;
           case "select":
             {
+              const states = [GameFunctionState.Playable, GameFunctionState.Support];
+              if (this._testGame) states.push(GameFunctionState.Testing);
               const yamlMgr = new YamlManager(this._client, subInt.user.id);
               const yamlList = new SelectMenuBuilder()
                 .setCustomId("yaml")
                 .setPlaceholder("Select your YAML")
-                .addOptions([...(await yamlMgr.GetYamlOptionsV3())]);
+                .addOptions([...(await yamlMgr.GetYamlOptionsV3(states))]);
 
               console.debug(
                 `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`
@@ -911,29 +914,31 @@ export class GameManagerV2 {
     };
 
     const UpdateOutput = (() => {
-      let lastUpdate = 0;
       let lastTimestampUpdate = Date.now();
-      let timeout: NodeJS.Timeout | undefined = undefined;
+      let timeout: NodeJS.Timeout | null = null;
+      let queuedRun = false;
       const retval = async (updateTimestamp = false) => {
         if (updateTimestamp) lastTimestampUpdate = Date.now();
-        if (timeout || this._state !== GameState.Running) return;
-
-        const deltaLastUpdate = Date.now() - lastUpdate - 1000;
-        if (deltaLastUpdate < 0)
-          timeout = setTimeout(() => {
-            timeout = undefined;
-            retval();
-          }, -deltaLastUpdate + 5);
-        else {
-          lastUpdate = Date.now();
-          serverOutput.value = lastFiveLines.join("\n");
-          if (serverOutput.value.length > 1024)
-            serverOutput.value = serverOutput.value.substring(0, 1021) + "…";
-          liveEmbed.setTimestamp(lastTimestampUpdate);
-          msg.edit({
-            embeds: [liveEmbed],
-          });
+        if (timeout) {
+          if (this._state === GameState.Running) queuedRun = true;
+          return;
         }
+
+        serverOutput.value = lastFiveLines.join("\n");
+        if (serverOutput.value.length > 1024)
+          serverOutput.value = serverOutput.value.substring(0, 1021) + "…";
+        liveEmbed.setTimestamp(lastTimestampUpdate);
+        msg.edit({
+          embeds: [liveEmbed],
+        });
+
+        timeout = setTimeout(() => {
+          timeout = null;
+          if (queuedRun) {
+            queuedRun = false;
+            retval(false);
+          }
+        }, 1000);
       };
       return retval;
     })();
@@ -1010,12 +1015,12 @@ export class GameManagerV2 {
                 .setComponents(
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
-                      .setLabel("Who would you like to send a hint?")
+                      .setLabel("Who would like a hint?")
                       .setCustomId("target")
                       .setRequired(true)
                       .setStyle(TextInputStyle.Short),
                     new TextInputBuilder()
-                      .setLabel("Which item do they want to hint for?")
+                      .setLabel("Which item is it for?")
                       .setCustomId("item")
                       .setRequired(true)
                       .setStyle(TextInputStyle.Short)
@@ -1033,12 +1038,12 @@ export class GameManagerV2 {
                 .setComponents(
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
-                      .setLabel("Who would you like to send an item?")
+                      .setLabel("Who would like an item?")
                       .setCustomId("target")
                       .setRequired(true)
                       .setStyle(TextInputStyle.Short),
                     new TextInputBuilder()
-                      .setLabel("Which item do you wish to send?")
+                      .setLabel("Which item to send?")
                       .setCustomId("item")
                       .setRequired(true)
                       .setStyle(TextInputStyle.Short)
