@@ -5,7 +5,8 @@ import { get as httpsGet } from "https";
 import { resolve as pathResolve } from "path";
 
 import {
-  ChatInputApplicationCommandData, CommandInteraction,
+  ChatInputApplicationCommandData,
+  CommandInteraction,
 } from "discord.js";
 import * as YAML from "yaml";
 
@@ -115,7 +116,7 @@ const GetGameList = (() => {
  * @param pgm The program to check for.
  * @returns {boolean} Whether that program is available on this system.
  */
- const SystemHas = (() => {
+const SystemHas = (() => {
   let retval: boolean | null = null;
   return async (pgm: string) => {
     if (retval !== null) return Promise.resolve(retval);
@@ -134,14 +135,14 @@ const GetGameList = (() => {
  * @async
  * @returns {Promise<boolean>} Whether `screen` is available on this system.
  */
-const SystemHasScreen = (): Promise<boolean> => SystemHas('screen');
+const SystemHasScreen = (): Promise<boolean> => SystemHas("screen");
 
 /**
  * Returns whether the current operating system has the `mkfifo` tool available.
  * @async
  * @returns {boolean} Whether `mkfifo` is available on this system.
  */
-const SystemHasMkfifo = (): Promise<boolean> => SystemHas('mkfifo');
+const SystemHasMkfifo = (): Promise<boolean> => SystemHas("mkfifo");
 
 /**
  * Creates a file system path, if it does not already exist.

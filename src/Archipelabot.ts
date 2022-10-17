@@ -89,7 +89,7 @@ export class Archipelabot {
         ],
         run: this.cmdAPResumeV2,
       },
-    {
+      {
         name: "admin",
         description: "Administrative functions (must be a bot admin to use)",
         type: ApplicationCommandType.ChatInput,
@@ -102,7 +102,7 @@ export class Archipelabot {
               { name: "Clean YAMLs", value: "cleanyaml" },
               { name: "Purge games older than 2 weeks", value: "purgegame" },
               { name: "Send YAML to user", value: "giveyaml" },
-              { name: "Start a test game", value: "testgame" }
+              { name: "Start a test game", value: "testgame" },
             ],
             required: true,
           },
@@ -132,32 +132,30 @@ export class Archipelabot {
     //console.debug("Test state:", ENABLE_TEST);
     if (ENABLE_TEST === "1") {
       console.info("Enabling test suite");
-      this._cmds.push(
-        {
-          name: "test",
-          description: "Testing commands",
-          type: ApplicationCommandType.ChatInput,
-          options: [
-            {
-              type: ApplicationCommandOptionType.String,
-              name: "run",
-              description: "What test to run.",
-              choices: [
-                { name: "Send file", value: "sendfile" },
-                { name: "ZIP", value: "zip" },
-                { name: "Port detection", value: "port" },
-                { name: "Long embeds/spoiler parsing", value: "spoiler" },
-                { name: "Rebuild YAML table", value: "rebuildyaml" },
-                { name: "Check for 'screen'", value: "checkscreen" },
-                { name: "Test new GameManager joiner", value: "joinertest" },
-                { name: "Test new GameManager runner", value: "runnertest" },
-              ],
-              required: true,
-            },
-          ],
-          run: this.cmdTest,
-        }
-      );
+      this._cmds.push({
+        name: "test",
+        description: "Testing commands",
+        type: ApplicationCommandType.ChatInput,
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "run",
+            description: "What test to run.",
+            choices: [
+              { name: "Send file", value: "sendfile" },
+              { name: "ZIP", value: "zip" },
+              { name: "Port detection", value: "port" },
+              { name: "Long embeds/spoiler parsing", value: "spoiler" },
+              { name: "Rebuild YAML table", value: "rebuildyaml" },
+              { name: "Check for 'screen'", value: "checkscreen" },
+              { name: "Test new GameManager joiner", value: "joinertest" },
+              { name: "Test new GameManager runner", value: "runnertest" },
+            ],
+            required: true,
+          },
+        ],
+        run: this.cmdTest,
+      });
     }
 
     console.debug(
@@ -335,7 +333,9 @@ export class Archipelabot {
     interaction: CommandInteraction,
     isTestGame = false
   ) => {
-    const gameHere = [...this._gamesv2].find((i) => i.guildId === interaction.guildId);
+    const gameHere = [...this._gamesv2].find(
+      (i) => i.guildId === interaction.guildId
+    );
     if (gameHere) {
       interaction.followUp(
         "There is already a game being organized on this server!"
@@ -930,7 +930,7 @@ export class Archipelabot {
     this._client.on("interactionCreate", subInteractionHandler);
   };
 
-  onChangeState = (game:GameManagerV2, state:GameState) => {
+  onChangeState = (game: GameManagerV2, state: GameState) => {
     if (state >= GameState.Stopped) this._gamesv2.delete(game);
-  }
+  };
 }

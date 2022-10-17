@@ -52,7 +52,7 @@ const { PYTHON_PATH, AP_PATH, HOST_DOMAIN } = process.env;
 
 type PlayersV3 = Record<string, string[]>;
 
-export type ChangeStateListener = (game:GameManagerV2, g: GameState) => void;
+export type ChangeStateListener = (game: GameManagerV2, g: GameState) => void;
 
 /** The interface for creating and managing games. */
 export class GameManagerV2 {
@@ -93,7 +93,8 @@ export class GameManagerV2 {
   }
   private set state(state) {
     if (state !== this._state)
-      for (const listener of [...this._changeStateListeners]) listener(this, state);
+      for (const listener of [...this._changeStateListeners])
+        listener(this, state);
     this._state = state;
   }
   /** The snowflake for the server this game is running on. */
@@ -390,7 +391,10 @@ export class GameManagerV2 {
             break;
           case "select":
             {
-              const states = [GameFunctionState.Playable, GameFunctionState.Support];
+              const states = [
+                GameFunctionState.Playable,
+                GameFunctionState.Support,
+              ];
               if (this._testGame) states.push(GameFunctionState.Testing);
               const yamlMgr = new YamlManager(this._client, subInt.user.id);
               const yamlList = new SelectMenuBuilder()
@@ -486,34 +490,36 @@ export class GameManagerV2 {
 
     const resultThen = async ({ retval, reason, user }: YamlListenerResult) => {
       let autorestart = false;
-      if (user) switch (reason) {
-        case "gotyaml":
-          {
-            const yamlMgr = new YamlManager(this._client, user.id);
-            const [code] = await yamlMgr.AddYamls(retval[0]);
+      if (user)
+        switch (reason) {
+          case "gotyaml":
+            {
+              const yamlMgr = new YamlManager(this._client, user.id);
+              const [code] = await yamlMgr.AddYamls(retval[0]);
+              user.send(
+                `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`
+              );
+              addYaml(user.id, code);
+              autorestart = true;
+            }
+            break;
+          case "yamlerror":
             user.send(
-              `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`
+              `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`
             );
-            addYaml(user.id, code);
             autorestart = true;
-          }
-          break;
-        case "yamlerror":
-          user.send(
-            `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`
-          );
-          autorestart = true;
-          break;
-        case "notyaml":
-          user.send(
-            `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`
-          );
-          autorestart = true;
-          break;
-        default:
-          break;
-      }
-      if (autorestart) ({ result, terminate } = await YamlManager.YamlListener(msg));
+            break;
+          case "notyaml":
+            user.send(
+              `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`
+            );
+            autorestart = true;
+            break;
+          default:
+            break;
+        }
+      if (autorestart)
+        ({ result, terminate } = await YamlManager.YamlListener(msg));
     };
     result.then(resultThen);
 
