@@ -150,6 +150,7 @@ export class Archipelabot {
               { name: "Check for 'screen'", value: "checkscreen" },
               { name: "Test new GameManager joiner", value: "joinertest" },
               { name: "Test new GameManager runner", value: "runnertest" },
+              { name: "Test Send modal", value: "sendmodal" },
             ],
             required: true,
           },
@@ -613,6 +614,52 @@ export class Archipelabot {
         return this.joinerTest(interaction);
       case "runnertest":
         return this.runnerTest(interaction);
+      case "sendmodal":
+        {
+          const test = await interaction.followUp({
+            content: "Push the button to test the Send modal.",
+            components: [
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`test-${interaction.id}`)
+                  .setLabel("Test")
+                  .setStyle(ButtonStyle.Primary)
+              ),
+            ],
+          });
+          const listener = async (subInt: DiscordInteraction) => {
+            if (!subInt.isButton()) return;
+            if (subInt.message.id === test.id) {
+              test.edit({
+                content: "Test launched!",
+                components: []
+              });
+              const modal = new ModalBuilder()
+                .setTitle("Specify user/item")
+                .setCustomId(`send-${test.id}`)
+                .setComponents(
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                      .setLabel("Who would like an item?")
+                      .setCustomId("target")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short),
+                  ),
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                    .setLabel("Which item to send?")
+                    .setCustomId("item")
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Short)
+                  )
+                );
+              this._client.off("interactionCreate", listener);
+              await subInt.showModal(modal);
+            }
+          };
+          this._client.on("interactionCreate", listener);
+        }
+        break;
       default:
         interaction.followUp(
           "Unrecognized subcommand. That shouldn't happen..."
