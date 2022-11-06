@@ -1024,7 +1024,9 @@ export class GameManagerV2 {
                       .setLabel("Who would like a hint?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short),
+                      .setStyle(TextInputStyle.Short)
+                  ),
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
                       .setLabel("Which item is it for?")
                       .setCustomId("item")
@@ -1047,9 +1049,11 @@ export class GameManagerV2 {
                       .setLabel("Who would like an item?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short),
+                      .setStyle(TextInputStyle.Short)
+                  ),
+                  new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
-                      .setLabel("Which item to send?")
+                      .setLabel("Which item will they receive?")
                       .setCustomId("item")
                       .setRequired(true)
                       .setStyle(TextInputStyle.Short)
