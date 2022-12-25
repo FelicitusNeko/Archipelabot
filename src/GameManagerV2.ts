@@ -196,6 +196,8 @@ export class GameManagerV2 {
     );
 
     // TODO: add a YAML listener to allow players to directly submit a YAML through the joiner
+    // - this should already be implemented but I think it's not working?
+    // TODO: add a method to remove a YAML
     const playersField: APIEmbedField = {
       name: "Players",
       value: "None yet",
@@ -924,6 +926,7 @@ export class GameManagerV2 {
       let timeout: NodeJS.Timeout | null = null;
       let queuedRun = false;
       const retval = async (updateTimestamp = false) => {
+        if (this._state !== GameState.Running) return;
         if (updateTimestamp) lastTimestampUpdate = Date.now();
         if (timeout) {
           if (this._state === GameState.Running) queuedRun = true;
