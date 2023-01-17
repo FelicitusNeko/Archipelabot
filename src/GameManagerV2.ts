@@ -3,6 +3,7 @@ import {
   createReadStream,
   createWriteStream,
   existsSync,
+  readFileSync,
   unlinkSync,
 } from "fs";
 import { copyFile, readdir, rm as fsRm, writeFile } from "fs/promises";
@@ -321,7 +322,7 @@ export class GameManagerV2 {
       addYaml(userId, code);
       subInt.reply({
         content: `You joined with ${
-          isDefault ? "your default YAML." : `YAML code ${code}`
+          isDefault ? "your default YAML" : `YAML code ${code}`
         }.${
           olderYaml
             ? ` Please be advised that this YAML is for an older version of Archipelago (${yamlVer?.join(
@@ -559,7 +560,7 @@ export class GameManagerV2 {
     const playerYamlList = await YamlManager.GetYamlsByCode(
       ...incomingYamls.map((i) => i[1])
     );
-    console.debug(incomingYamls, playerYamlList);
+    //console.debug(incomingYamls, playerYamlList);
 
     await Promise.all(
       playerYamlList.map((i) =>
@@ -744,13 +745,12 @@ export class GameManagerV2 {
         this.state = GameState.Ready;
         return this.RunGame();
       })
-      .catch((e) => {
-        // BUG: this doesn't seem to actually do anything; if generation fails, the bot crashes
+      .catch(() => {
         writeMsg({
           content: "An error occurred during game generation.",
           files: [
-            new AttachmentBuilder((e as Error).message, {
-              name: "Generation Error.txt",
+            new AttachmentBuilder(readFileSync(pathJoin("games", this._code, `${this._code}-gen.stderr.log`)), {
+              name: `stderr.log`,
             }),
           ],
         });
