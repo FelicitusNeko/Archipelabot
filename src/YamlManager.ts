@@ -11,8 +11,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   EmbedBuilder,
-  SelectMenuBuilder,
-  SelectMenuOptionBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   InteractionUpdateOptions,
   ButtonStyle,
   MessageType,
@@ -128,8 +128,8 @@ export class YamlManager {
     };
 
     /** A component row containing a YAML dropdown box. */
-    const yamlRow = new ActionRowBuilder<SelectMenuBuilder>().addComponents(
-      new SelectMenuBuilder({
+    const yamlRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder({
         customId: "yaml",
         placeholder: "Select a YAML",
         options: (await this.GetYamlOptionsV3([])).map((i) => i.toJSON()),
@@ -168,11 +168,11 @@ export class YamlManager {
     let { result, terminate } = await YamlManager.YamlListener(msg);
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
-      if (!subInt.isSelectMenu() && !subInt.isButton()) return;
+      if (!subInt.isStringSelectMenu() && !subInt.isButton()) return;
       if (subInt.user.id !== this.userId) return;
       if (subInt.message.id !== msg.id) return;
 
-      if (subInt.isSelectMenu()) {
+      if (subInt.isStringSelectMenu()) {
         if (subInt.values[0] === "noyaml")
           subInt.update({
             content:
@@ -225,7 +225,7 @@ export class YamlManager {
                 );
 
                 (buttonRow.components[1] as ButtonBuilder).setDisabled(true);
-                (yamlRow.components[0] as SelectMenuBuilder).setOptions(
+                (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
                   await this.GetYamlOptionsV3([])
                 );
                 subInt.update({
@@ -273,7 +273,7 @@ export class YamlManager {
               unlink(pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)),
             ]);
 
-            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
+            (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             curEntry = null;
@@ -333,7 +333,7 @@ export class YamlManager {
           if (curEntry) {
             await this.UpdateYaml(curEntry.code, retval[0]);
             curEntry = await YamlTable.findByPk(curEntry.code);
-            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
+            (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             msg.edit({
@@ -342,7 +342,7 @@ export class YamlManager {
             });
           } else {
             await this.AddYamls(...retval);
-            (yamlRow.components[0] as SelectMenuBuilder).setOptions(
+            (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
               await this.GetYamlOptionsV3([])
             );
             msg.edit({
@@ -461,7 +461,7 @@ export class YamlManager {
    */
   public async GetYamlOptionsV3(
     validStates: GameFunctionState[] = [GameFunctionState.Playable]
-  ): Promise<SelectMenuOptionBuilder[]> {
+  ): Promise<StringSelectMenuOptionBuilder[]> {
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
       (await PlayerTable.create({ userId: this.userId, defaultCode: null }));
@@ -481,7 +481,7 @@ export class YamlManager {
           );
           let games = i.games.join(", ");
           if (games.length > 100) games = games.substring(0, 97) + "…";
-          return new SelectMenuOptionBuilder({
+          return new StringSelectMenuOptionBuilder({
             label:
               i.description && i.description.length > 0
                 ? i.description
@@ -495,7 +495,7 @@ export class YamlManager {
 
     return retval.length === 0
       ? [
-          new SelectMenuOptionBuilder({
+          new StringSelectMenuOptionBuilder({
             label: "No YAMLs",
             value: "noyaml",
           }),

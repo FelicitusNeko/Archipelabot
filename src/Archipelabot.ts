@@ -7,16 +7,16 @@ import {
   ButtonBuilder,
   EmbedBuilder,
   AttachmentBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  ModalBuilder,
   ApplicationCommandType,
   ApplicationCommandOptionType,
   InteractionType,
   MessageType,
   ButtonStyle,
   userMention,
-  SelectMenuBuilder,
   APIEmbedField,
-  ModalBuilder,
-  TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
 import * as AdmZip from "adm-zip";
@@ -738,7 +738,7 @@ export class Archipelabot {
             case "select":
               {
                 const yamlMgr = new YamlManager(this._client, subInt.user.id);
-                const yamlList = new SelectMenuBuilder()
+                const yamlList = new StringSelectMenuBuilder()
                   .setCustomId("yaml")
                   .setPlaceholder("Select your YAML")
                   .addOptions([...(await yamlMgr.GetYamlOptionsV3())]);
@@ -750,7 +750,7 @@ export class Archipelabot {
                   content:
                     "Select a YAML to play. You can select more than one if you wish, including the same YAML multiple times.",
                   components: [
-                    new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+                    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
                       yamlList
                     ),
                   ],
@@ -875,8 +875,8 @@ export class Archipelabot {
         "For instance: `.forfeit player`",
       embeds: [liveEmbed],
       components: [
-        new ActionRowBuilder<SelectMenuBuilder>().addComponents(
-          new SelectMenuBuilder()
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          new StringSelectMenuBuilder()
             .setCustomId("cmd")
             .setPlaceholder("Select a command")
             .addOptions(

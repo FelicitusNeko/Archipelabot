@@ -21,7 +21,8 @@ import {
   ButtonBuilder,
   EmbedBuilder,
   ModalBuilder,
-  SelectMenuBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
   TextInputBuilder,
   ButtonStyle,
   ChannelType,
@@ -31,7 +32,6 @@ import {
   MessagePayload,
   APIEmbedField,
   userMention,
-  SelectMenuInteraction,
 } from "discord.js";
 import { Op as SqlOp } from "sequelize";
 import { mkfifoSync } from "mkfifo";
@@ -248,7 +248,7 @@ export class GameManagerV2 {
     const addYamlSafe = async (
       userId: string,
       code: string,
-      subInt: ButtonInteraction | SelectMenuInteraction,
+      subInt: ButtonInteraction | StringSelectMenuInteraction,
       isDefault = false
     ) => {
       let olderYaml = false;
@@ -400,7 +400,7 @@ export class GameManagerV2 {
               ];
               if (this._testGame) states.push(GameFunctionState.Testing);
               const yamlMgr = new YamlManager(this._client, subInt.user.id);
-              const yamlList = new SelectMenuBuilder()
+              const yamlList = new StringSelectMenuBuilder()
                 .setCustomId("yaml")
                 .setPlaceholder("Select your YAML")
                 .addOptions([...(await yamlMgr.GetYamlOptionsV3(states))]);
@@ -411,7 +411,7 @@ export class GameManagerV2 {
               subInt.reply({
                 content: "Select a YAML to play.",
                 components: [
-                  new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+                  new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
                     yamlList
                   ),
                 ],
@@ -467,7 +467,7 @@ export class GameManagerV2 {
         }
       } else if (subInt.message.reference?.messageId === msg.id) {
         // YAML response
-        if (subInt.isSelectMenu() && subInt.customId === "yaml") {
+        if (subInt.isStringSelectMenu() && subInt.customId === "yaml") {
           msg.edit({ components: [buttonRow] });
 
           console.debug(
@@ -824,8 +824,8 @@ export class GameManagerV2 {
         "For instance: `.forfeit player`",
       embeds: [liveEmbed],
       components: [
-        new ActionRowBuilder<SelectMenuBuilder>().addComponents(
-          new SelectMenuBuilder()
+        new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          new StringSelectMenuBuilder()
             .setCustomId("cmd")
             .setPlaceholder("Select a command")
             .addOptions(
@@ -990,7 +990,7 @@ export class GameManagerV2 {
       }
 
       const modalPrompt = async (event: string) => {
-        if (!subInt.isSelectMenu()) return;
+        if (!subInt.isStringSelectMenu()) return;
         const modal = new ModalBuilder()
           .setTitle("Specify user")
           .setCustomId(`${event}-${msg.id}`)
@@ -1007,7 +1007,7 @@ export class GameManagerV2 {
         await subInt.showModal(modal);
       };
 
-      if (subInt.isSelectMenu()) {
+      if (subInt.isStringSelectMenu()) {
         if (subInt.message.id !== msg.id) return;
         switch (subInt.values[0]) {
           case "release":
