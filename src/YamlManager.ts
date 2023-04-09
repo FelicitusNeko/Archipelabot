@@ -123,6 +123,7 @@ export class YamlManager {
                 inline: true,
               },
             ],
+            timestamp: curEntry.updatedAt.toISOString()
           }),
         ];
     };
@@ -184,6 +185,7 @@ export class YamlManager {
           if (!curEntry) {
             subInt.update(startingState);
           } else {
+            
             const playerEntry = await PlayerTable.findByPk(this.userId);
             const worstState = YamlManager.GetWorstStatus(curEntry.games);
             (buttonRow.components[1] as ButtonBuilder).setDisabled(
@@ -200,7 +202,7 @@ export class YamlManager {
                   attachment: readFileSync(
                     pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)
                   ),
-                  name: `${curEntry.filename}.yaml`,
+                  name: `${this._user.username}-${curEntry.updatedAt.toISOString().substring(0, 10)}.yaml`,
                 },
               ],
             });
