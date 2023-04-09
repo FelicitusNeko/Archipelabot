@@ -104,7 +104,7 @@ export class YamlManager {
   public async YamlManager() {
     let curEntry: YamlTable | null = null;
 
-    const generateCurEntryEmbed = (/*calledUser?: string*/) => {
+    const generateCurEntryEmbed = async (/*calledUser?: string*/) => {
       if (!curEntry) return [];
       else
         return [
@@ -115,27 +115,35 @@ export class YamlManager {
               {
                 name: "Games",
                 value: curEntry.games.join(", ") ?? "Unknown",
-                inline: true,
               },
               {
                 name: "User",
                 value: userMention(curEntry.userId),
                 inline: true,
               },
+              {
+                name: "AP ver",
+                value:
+                  (await YamlManager.GetYamlVersionByCode(curEntry.code))?.join(
+                    "."
+                  ) ?? "Unknown",
+                inline: true,
+              },
             ],
-            timestamp: curEntry.updatedAt.toISOString()
+            timestamp: curEntry.updatedAt.toISOString(),
           }),
         ];
     };
 
     /** A component row containing a YAML dropdown box. */
-    const yamlRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      new StringSelectMenuBuilder({
-        customId: "yaml",
-        placeholder: "Select a YAML",
-        options: (await this.GetYamlOptionsV3([])).map((i) => i.toJSON()),
-      })
-    );
+    const yamlRow =
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder({
+          customId: "yaml",
+          placeholder: "Select a YAML",
+          options: (await this.GetYamlOptionsV3([])).map((i) => i.toJSON()),
+        })
+      );
     /** A component row containing buttons to manage individual YAMLs. */
     const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder({
@@ -185,7 +193,6 @@ export class YamlManager {
           if (!curEntry) {
             subInt.update(startingState);
           } else {
-            
             const playerEntry = await PlayerTable.findByPk(this.userId);
             const worstState = YamlManager.GetWorstStatus(curEntry.games);
             (buttonRow.components[1] as ButtonBuilder).setDisabled(
@@ -195,14 +202,16 @@ export class YamlManager {
             subInt.update({
               content:
                 "You can update the selected YAML by replying to this message with a new one. You can also set it as default for sync runs, or delete it.",
-              embeds: generateCurEntryEmbed(/*subInt.user.id*/),
+              embeds: await generateCurEntryEmbed(/*subInt.user.id*/),
               components: [buttonRow],
               files: [
                 {
                   attachment: readFileSync(
                     pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)
                   ),
-                  name: `${this._user.username}-${curEntry.updatedAt.toISOString().substring(0, 10)}.yaml`,
+                  name: `${this._user.username}-${curEntry.updatedAt
+                    .toISOString()
+                    .substring(0, 10)}.yaml`,
                 },
               ],
             });
@@ -287,6 +296,8 @@ export class YamlManager {
               >({}, startingState, {
                 content:
                   "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
+                files: [],
+                embeds: [],
               })
             );
             break;
@@ -302,7 +313,7 @@ export class YamlManager {
           default:
             console.debug(subInt);
             subInt.update({
-              content: `You clicked the ${subInt.customId} button!`,
+              content: `You clicked the ${subInt.customId} button! (Apparently I don't know what that means.)`,
             });
             break;
         }
@@ -340,7 +351,7 @@ export class YamlManager {
             );
             msg.edit({
               content: `Thanks! YAML has been updated.`,
-              embeds: generateCurEntryEmbed(),
+              embeds: await generateCurEntryEmbed(),
             });
           } else {
             await this.AddYamls(...retval);
@@ -366,7 +377,12 @@ export class YamlManager {
           break;
         default:
           if (reason === "time")
-            msg.edit({ content: "Timed out.", embeds: [], components: [] });
+            msg.edit({
+              content: "Timed out.",
+              embeds: [],
+              components: [],
+              files: [],
+            });
           this._client.off("interactionCreate", subInteractionHandler);
           console.debug(
             "Message collector for YAML manager for user %s#%s has been closed.",
