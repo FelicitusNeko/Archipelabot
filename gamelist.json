@@ -1,5 +1,5 @@
 {
-  "version": [0, 3, 7],
+  "version": [0, 4, 0],
   "games": [
     "A Link to the Past",
     "Factorio",
@@ -29,9 +29,16 @@
     "Pokemon Red and Blue",
     "Hylics 2",
     "Zillion",
-    "Lufia II Ancient Cave"
+    "Lufia II Ancient Cave",
+    "Stardew Valley",
+    "Links Awakening DX",
+    "Adventure",
+    "Blasphemous",
+    "The Messenger",
+    "Wargroove",
+    "The Legend of Zelda"
   ],
   "testgames": ["Bumper Stickers"],
   "upcoming": [],
-  "support": ["ChecksFinder", "ArchipIDLE", "Sudoku"]
+  "support": ["ChecksFinder", "ArchipIDLE", "Sudoku", "Clique"]
 }
