@@ -321,6 +321,7 @@ export class GameManagerV2 {
       }
       addYaml(userId, code);
       subInt.reply({
+        // BUG: it is not detecting for default YAML missing
         content: `You joined with ${
           isDefault ? "your default YAML" : `YAML code ${code}`
         }.${
@@ -361,7 +362,7 @@ export class GameManagerV2 {
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (subInt.channelId !== msg.channelId) return;
-      if (!(subInt.isButton() || subInt.isSelectMenu())) return;
+      if (!(subInt.isButton() || subInt.isStringSelectMenu())) return;
 
       if (subInt.message.id == msg.id) {
         // Main message
@@ -979,7 +980,7 @@ export class GameManagerV2 {
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (subInt.channelId !== msg.channelId) return;
-      if (!(subInt.isSelectMenu() || subInt.isModalSubmit())) return;
+      if (!(subInt.isStringSelectMenu() || subInt.isModalSubmit())) return;
 
       if (subInt.user.id !== this.hostId) {
         subInt.reply({

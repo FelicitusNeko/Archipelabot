@@ -716,7 +716,7 @@ export class Archipelabot {
 
       const subInteractionHandler = async (subInt: DiscordInteraction) => {
         if (subInt.channelId !== msg.channelId) return;
-        if (!(subInt.isButton() || subInt.isSelectMenu())) return;
+        if (!(subInt.isButton() || subInt.isStringSelectMenu())) return;
 
         if (subInt.message.id == msg.id) {
           // Main message
@@ -812,7 +812,7 @@ export class Archipelabot {
         } else if (subInt.message.reference?.messageId === msg.id) {
           // YAML response
           console.debug("Input from YAML selector");
-          if (subInt.isSelectMenu() && subInt.customId === "yaml") {
+          if (subInt.isStringSelectMenu() && subInt.customId === "yaml") {
             launchBtn.setDisabled(false);
             msg.edit({ components: [buttonRow] });
 
@@ -905,10 +905,10 @@ export class Archipelabot {
 
     const subInteractionHandler = async (subInt: DiscordInteraction) => {
       if (subInt.channelId !== msg.channelId) return;
-      if (!(subInt.isSelectMenu() || subInt.isModalSubmit())) return;
+      if (!(subInt.isStringSelectMenu() || subInt.isModalSubmit())) return;
 
       const modalPrompt = async (event: string) => {
-        if (!subInt.isSelectMenu()) return;
+        if (!subInt.isStringSelectMenu()) return;
         const modal = new ModalBuilder()
           .setTitle("Specify user")
           .setCustomId(`${event}-${msg.id}`)
@@ -925,7 +925,7 @@ export class Archipelabot {
         await subInt.showModal(modal);
       };
 
-      if (subInt.isSelectMenu()) {
+      if (subInt.isStringSelectMenu()) {
         if (subInt.message.id !== msg.id) return;
         switch (subInt.values[0]) {
           case "release":
