@@ -40,5 +40,6 @@
   ],
   "testgames": ["Bumper Stickers"],
   "upcoming": [],
-  "support": ["ChecksFinder", "ArchipIDLE", "Sudoku", "Clique"]
+  "support": ["ChecksFinder", "ArchipIDLE", "Clique"],
+  "specialHandling": ["Sudoku"]
 }

@@ -406,6 +406,7 @@ export class YamlManager {
    */
   public async AddYamls(...yamls: YamlData[]) {
     // TODO: check against existing yamls for user to prevent duplicates
+    // TODO: fail to add YAML if there are already 25
     const existingCodes = (
       await YamlTable.findAll({
         attributes: ["code"],
@@ -743,6 +744,7 @@ export class YamlManager {
       case GameFunctionState.Support:
         return "🗡️";
       case GameFunctionState.Excluded:
+      case GameFunctionState.SpecialHandling:
         return "❌";
       case GameFunctionState.Unknown:
         return "❓";

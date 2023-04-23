@@ -47,6 +47,8 @@ export enum GameFunctionState {
   Support,
   /** The game has been removed. */
   Excluded,
+  /** The game has special handling and does not require a YAML. */
+  SpecialHandling,
   /** The game is not on the list in any category. */
   Unknown,
 }
@@ -88,6 +90,7 @@ export interface GameList {
   upcoming?: string[];
   excluded?: string[];
   support?: string[];
+  specialHandling?: string[];
 }
 
 /**
@@ -211,6 +214,8 @@ const GetGameFunctionState = (game: string): GameFunctionState => {
           return GameFunctionState.Support;
         case "excluded":
           return GameFunctionState.Excluded;
+        case "specialHandling":
+          return GameFunctionState.SpecialHandling;
         default:
           return GameFunctionState.Unknown;
       }
@@ -383,6 +388,8 @@ const GetStdFunctionStateErrorMsg = (
       return `This YAML contains games that are no longer part of AP, and cannot be used ${cannotBeUsed}.`;
     case GameFunctionState.Support:
       return `This YAML contains a support game. Whether it can be used ${cannotBeUsed} is up to the host.`;
+    case GameFunctionState.SpecialHandling:
+      return `This YAML cannot be used ${cannotBeUsed} because it contains a game which has special handling by the server.`;
     case GameFunctionState.Unknown:
       return `This YAML contains games in an unknown state, and cannot be used ${cannotBeUsed}.`;
   }
