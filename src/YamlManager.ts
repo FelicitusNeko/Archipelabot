@@ -480,11 +480,13 @@ export class YamlManager {
   public async GetYamlOptionsV3(
     validStates: GameFunctionState[] = [GameFunctionState.Playable]
   ): Promise<StringSelectMenuOptionBuilder[]> {
+    // BUG: more than 25 YAMLs breaks the dropdown
     const playerEntry =
       (await PlayerTable.findByPk(this.userId)) ??
       (await PlayerTable.create({ userId: this.userId, defaultCode: null }));
     const retval = await YamlTable.findAll({
       where: { userId: this.userId },
+      order: [["updatedAt", "DESC"]],
     }).then((r) =>
       r
         .filter((i) =>
@@ -511,14 +513,15 @@ export class YamlManager {
         })
     );
 
-    return retval.length === 0
+    // HACK: truncate YAML list to last 25
+    return (retval.length === 0
       ? [
           new StringSelectMenuOptionBuilder({
             label: "No YAMLs",
             value: "noyaml",
           }),
         ]
-      : retval;
+      : retval).slice(0, 25);
   }
 
   /**
