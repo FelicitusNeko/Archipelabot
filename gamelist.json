@@ -1,5 +1,5 @@
 {
-  "version": [0, 4, 0],
+  "version": [0, 4, 3],
   "games": [
     "A Link to the Past",
     "Factorio",
@@ -36,9 +36,15 @@
     "Blasphemous",
     "The Messenger",
     "Wargroove",
-    "The Legend of Zelda"
+    "The Legend of Zelda",
+    "Muse Dash",
+    "MegaMan Battle Network 3",
+    "DOOM 1993",
+    "Bumper Stickers",
+    "Terraria",
+    "Undertale"
   ],
-  "testgames": ["Bumper Stickers"],
+  "testgames": [],
   "upcoming": [],
   "support": ["ChecksFinder", "ArchipIDLE", "Clique"],
   "specialHandling": ["Sudoku"]
