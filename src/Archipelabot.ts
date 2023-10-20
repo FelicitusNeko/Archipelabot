@@ -427,7 +427,7 @@ export class Archipelabot {
               });
               msgCollector.on("collect", (msgIn) => {
                 const yamls = msgIn.attachments.filter(
-                  (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
+                  (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml")
                 );
                 if (yamls.size === 0)
                   msg.edit("That wasn't a YAML! Please try again.");
@@ -632,7 +632,7 @@ export class Archipelabot {
             if (subInt.message.id === test.id) {
               test.edit({
                 content: "Test launched!",
-                components: []
+                components: [],
               });
               const modal = new ModalBuilder()
                 .setTitle("Specify user/item")
@@ -643,14 +643,14 @@ export class Archipelabot {
                       .setLabel("Who would like an item?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short),
+                      .setStyle(TextInputStyle.Short)
                   ),
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
-                    .setLabel("Which item to send?")
-                    .setCustomId("item")
-                    .setRequired(true)
-                    .setStyle(TextInputStyle.Short)
+                      .setLabel("Which item to send?")
+                      .setCustomId("item")
+                      .setRequired(true)
+                      .setStyle(TextInputStyle.Short)
                   )
                 );
               this._client.off("interactionCreate", listener);

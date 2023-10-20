@@ -515,14 +515,16 @@ export class YamlManager {
     );
 
     // HACK: truncate YAML list to last 25
-    return (retval.length === 0
-      ? [
-          new StringSelectMenuOptionBuilder({
-            label: "No YAMLs",
-            value: "noyaml",
-          }),
-        ]
-      : retval).slice(0, 25);
+    return (
+      retval.length === 0
+        ? [
+            new StringSelectMenuOptionBuilder({
+              label: "No YAMLs",
+              value: "noyaml",
+            }),
+          ]
+        : retval
+    ).slice(0, 25);
   }
 
   /**
@@ -553,7 +555,7 @@ export class YamlManager {
     msgCollector.on("collect", (msgIn) => {
       user = msgIn.author;
       const yamls = msgIn.attachments.filter(
-        (i) => i.url.endsWith(".yaml") || i.url.endsWith(".yml")
+        (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml")
       );
       if (yamls.size === 0) msg.edit("That wasn't a YAML! Please try again.");
       else {
