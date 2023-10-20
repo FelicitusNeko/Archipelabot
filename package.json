@@ -36,12 +36,12 @@
     "@types/validator": "^13.7.0",
     "@typescript-eslint/eslint-plugin": "^5.33.0",
     "@typescript-eslint/parser": "^5.33.0",
-    "@yarnpkg/sdks": "^3.0.0-rc.14",
+    "@yarnpkg/sdks": "^3.0.0-rc.53",
     "eslint": "^8.22.0",
     "prettier": "^2.7.1"
   },
   "resolutions": {
     "@sapphire/shapeshift": "^3.6.0"
   },
-  "packageManager": "yarn@3.2.4"
+  "packageManager": "yarn@3.6.4"
 }
