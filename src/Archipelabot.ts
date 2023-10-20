@@ -161,7 +161,7 @@ export class Archipelabot {
 
     console.debug(
       "Commands:",
-      this._cmds.map((i) => i.name)
+      this._cmds.map((i) => i.name),
     );
 
     this._client.once("ready", () => {
@@ -175,7 +175,7 @@ export class Archipelabot {
         //if (interaction.isCommand() || interaction.isContextMenu()) {
         if (interaction.type == InteractionType.ApplicationCommand) {
           const slashCommand = this._cmds.find(
-            (c) => c.name === interaction.commandName
+            (c) => c.name === interaction.commandName,
           );
           if (!slashCommand) {
             interaction.followUp({
@@ -199,7 +199,7 @@ export class Archipelabot {
             });
           });
         }
-      }
+      },
     );
 
     MkdirIfNotExist("./yamls");
@@ -223,7 +223,7 @@ export class Archipelabot {
     sendingUser: string,
     receivingUser: DiscordUser | undefined,
     yamlData: YamlData,
-    yamlAttach?: AttachmentBuilder // NOTE: is this being used?
+    yamlAttach?: AttachmentBuilder, // NOTE: is this being used?
   ) {
     if (!receivingUser || !yamlAttach) return;
 
@@ -242,12 +242,12 @@ export class Archipelabot {
         customId: "reject",
         label: "Reject",
         style: ButtonStyle.Danger,
-      })
+      }),
     );
 
     const msg = await receivingUser.send({
       content: `${userMention(
-        sendingUser
+        sendingUser,
       )} has sent you a YAML. Please review it and choose if you'd like to add it to your collection.`,
       files: [{ attachment: Buffer.from(yamlData.data) }],
       components: [actRow],
@@ -265,8 +265,8 @@ export class Archipelabot {
           {
             const code = GenerateLetterCode(
               (await YamlTable.findAll({ attributes: ["code"] })).map(
-                (i) => i.code
-              )
+                (i) => i.code,
+              ),
             );
             // Create player entry if it doesn't exist
             (await PlayerTable.findByPk(receivingUser.id)) ??
@@ -279,7 +279,7 @@ export class Archipelabot {
             await Promise.all([
               writeFile(
                 `./yamls/${receivingUser.id}/${msg.id}.yaml`,
-                yamlData.data
+                yamlData.data,
               ),
               YamlTable.create({
                 code,
@@ -294,7 +294,7 @@ export class Archipelabot {
             if (subInt.customId === "acceptAsDefault")
               PlayerTable.update(
                 { defaultCode: code },
-                { where: { userId: receivingUser.id } }
+                { where: { userId: receivingUser.id } },
               );
 
             subInt.update({
@@ -332,14 +332,14 @@ export class Archipelabot {
 
   cmdAPStartV2 = async (
     interaction: CommandInteraction,
-    isTestGame = false
+    isTestGame = false,
   ) => {
     const gameHere = [...this._gamesv2].find(
-      (i) => i.guildId === interaction.guildId
+      (i) => i.guildId === interaction.guildId,
     );
     if (gameHere) {
       interaction.followUp(
-        "There is already a game being organized on this server!"
+        "There is already a game being organized on this server!",
       );
     } else {
       const game = await GameManagerV2.NewGame(this._client, isTestGame);
@@ -358,13 +358,13 @@ export class Archipelabot {
       if (creationData) {
         if (interaction.guildId !== creationData.guild) {
           interaction.followUp(
-            `Game ${codeUpper} was not created on this server.`
+            `Game ${codeUpper} was not created on this server.`,
           );
         } else if (interaction.user.id !== creationData.host) {
           interaction.followUp(
             `This is not your game! Game ${codeUpper} was created by ${userMention(
-              creationData.host
-            )}.`
+              creationData.host,
+            )}.`,
           );
         } else {
           interaction.followUp(`Attempting to launch game ${codeUpper}.`);
@@ -406,14 +406,14 @@ export class Archipelabot {
                 const supervisorMsg = {
                   ephemeral: true,
                   content: `Assigning a YAML to ${userMention(
-                    targetUser.value as string
+                    targetUser.value as string,
                   )}. Please reply to this message with the YAML you wish to assign.`,
                 };
                 if (interaction.channel)
                   return interaction.followUp(supervisorMsg);
                 else {
                   await interaction.followUp(
-                    "Okay, YAML supervisor. One sec..."
+                    "Okay, YAML supervisor. One sec...",
                   );
                   return interaction.user.send(supervisorMsg);
                 }
@@ -427,7 +427,7 @@ export class Archipelabot {
               });
               msgCollector.on("collect", (msgIn) => {
                 const yamls = msgIn.attachments.filter(
-                  (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml")
+                  (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml"),
                 );
                 if (yamls.size === 0)
                   msg.edit("That wasn't a YAML! Please try again.");
@@ -443,12 +443,12 @@ export class Archipelabot {
                         this.sendYamlForApproval(
                           sendingUser,
                           targetUser.user,
-                          validate
+                          validate,
                           //yamls.first() // TODO: not sure that I'm even using this anywhere
                         );
                       } else {
                         msg.edit(
-                          `The supplied YAML was invalid: ${validate.error}. Please try again.`
+                          `The supplied YAML was invalid: ${validate.error}. Please try again.`,
                         );
                       }
 
@@ -476,7 +476,7 @@ export class Archipelabot {
         return this.cmdAPStartV2(interaction, true);
       default:
         interaction.followUp(
-          "Unrecognized subcommand. That shouldn't happen..."
+          "Unrecognized subcommand. That shouldn't happen...",
         );
     }
   };
@@ -521,7 +521,7 @@ export class Archipelabot {
         interaction.followUp(
           `Port 38281 is ${
             (await isPortAvailable(38281)) ? "" : "not "
-          }available.`
+          }available.`,
         );
         break;
       case "spoiler": // Tests reading a spoiler file for who's playing.
@@ -568,17 +568,17 @@ export class Archipelabot {
                   .map((i) =>
                     readdir(pathJoin("yamls", i.name), {
                       withFileTypes: true,
-                    }).then((files) => [i.name, files] as [string, Dirent[]])
-                  )
-              )
+                    }).then((files) => [i.name, files] as [string, Dirent[]]),
+                  ),
+              ),
             )
             .then(async (fileList) => {
               for (const [userId, files] of fileList) {
                 for (const file of files.filter((i) =>
-                  i.name.endsWith(".yaml")
+                  i.name.endsWith(".yaml"),
                 )) {
                   const validate = await readFile(
-                    pathJoin("yamls", userId, file.name)
+                    pathJoin("yamls", userId, file.name),
                   ).then((data) => QuickValidateYaml(data.toString()));
                   if (!validate.error) {
                     const code = GenerateLetterCode(codes);
@@ -599,7 +599,7 @@ export class Archipelabot {
           await PlayerTable.update({ defaultCode: null }, { where: {} });
 
           interaction.followUp(
-            `YAML table rebuilt with ${codes.length} YAMLs. All defaults reset.`
+            `YAML table rebuilt with ${codes.length} YAMLs. All defaults reset.`,
           );
         }
         break;
@@ -607,7 +607,7 @@ export class Archipelabot {
         interaction.followUp(
           `This system ${
             (await SystemHasScreen()) ? "has" : "does not have"
-          } \`screen\` available to it.`
+          } \`screen\` available to it.`,
         );
         break;
       case "joinertest":
@@ -623,7 +623,7 @@ export class Archipelabot {
                 new ButtonBuilder()
                   .setCustomId(`test-${interaction.id}`)
                   .setLabel("Test")
-                  .setStyle(ButtonStyle.Primary)
+                  .setStyle(ButtonStyle.Primary),
               ),
             ],
           });
@@ -643,15 +643,15 @@ export class Archipelabot {
                       .setLabel("Who would like an item?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
+                      .setStyle(TextInputStyle.Short),
                   ),
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
                       .setLabel("Which item to send?")
                       .setCustomId("item")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
-                  )
+                      .setStyle(TextInputStyle.Short),
+                  ),
                 );
               this._client.off("interactionCreate", listener);
               await subInt.showModal(modal);
@@ -662,7 +662,7 @@ export class Archipelabot {
         break;
       default:
         interaction.followUp(
-          "Unrecognized subcommand. That shouldn't happen..."
+          "Unrecognized subcommand. That shouldn't happen...",
         );
     }
   };
@@ -692,12 +692,12 @@ export class Archipelabot {
           .setCustomId("cancel")
           .setStyle(ButtonStyle.Danger)
           .setEmoji("🚪")
-          .setLabel("Cancel")
+          .setLabel("Cancel"),
       );
 
       const msg = await interaction.followUp({
         content: `${userMention(
-          interaction.user.id
+          interaction.user.id,
         )} is starting a game! ||not actually but pretend they are||`,
         embeds: [
           new EmbedBuilder()
@@ -705,7 +705,7 @@ export class Archipelabot {
             .setDescription(
               'Click "⚔️ Join" to join this game with your default YAML.\n' +
                 'Click "🛡️ Join with..." to join with a different YAML.\n' +
-                'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.'
+                'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.',
             )
             .setColor("Gold")
             .setTimestamp(Date.now())
@@ -732,7 +732,7 @@ export class Archipelabot {
               });
               msg.edit({ components: [buttonRow] });
               console.debug(
-                `Simulating adding default for ${subInt.user.username}#${subInt.user.discriminator}`
+                `Simulating adding default for ${subInt.user.username}#${subInt.user.discriminator}`,
               );
               break;
             case "select":
@@ -744,14 +744,14 @@ export class Archipelabot {
                   .addOptions([...(await yamlMgr.GetYamlOptionsV3())]);
 
                 console.debug(
-                  `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`
+                  `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`,
                 );
                 subInt.reply({
                   content:
                     "Select a YAML to play. You can select more than one if you wish, including the same YAML multiple times.",
                   components: [
                     new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-                      yamlList
+                      yamlList,
                     ),
                   ],
                   ephemeral: true,
@@ -780,9 +780,9 @@ export class Archipelabot {
               setTimeout(
                 () =>
                   subInt.followUp(
-                    "If this was a real game, it would have generated at this point."
+                    "If this was a real game, it would have generated at this point.",
                   ),
-                3000
+                3000,
               );
               break;
             case "cancel":
@@ -817,7 +817,7 @@ export class Archipelabot {
             msg.edit({ components: [buttonRow] });
 
             console.debug(
-              `Simulating adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`
+              `Simulating adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`,
             );
             subInt.reply({
               content: `YAML ${subInt.values[0]} added to this game. You can add more by selecting them in the list.`,
@@ -860,7 +860,7 @@ export class Archipelabot {
         {
           name: "Host",
           value: userMention(interaction.user.id),
-        }
+        },
       )
       .setTimestamp(Date.now())
       .setFooter({
@@ -897,8 +897,8 @@ export class Archipelabot {
                 label: "Close server",
                 description:
                   "Closes the server. It can be relaunched later with `/apresume ABCD`.",
-              }
-            )
+              },
+            ),
         ),
       ],
     });
@@ -918,8 +918,8 @@ export class Archipelabot {
                 .setLabel(`Who would you like to ${event}?`)
                 .setCustomId("target")
                 .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-            )
+                .setStyle(TextInputStyle.Short),
+            ),
           );
 
         await subInt.showModal(modal);

@@ -131,7 +131,7 @@ export class GameManagerV2 {
     client: DiscordClient,
     code: string,
     testGame: boolean,
-    existingGame?: GameTable
+    existingGame?: GameTable,
   ) {
     this._client = client;
     this._testGame = testGame;
@@ -193,7 +193,7 @@ export class GameManagerV2 {
         .setCustomId("cancel")
         .setStyle(ButtonStyle.Danger)
         .setEmoji("🚪")
-        .setLabel("Cancel")
+        .setLabel("Cancel"),
     );
 
     // TODO: add a YAML listener to allow players to directly submit a YAML through the joiner
@@ -212,7 +212,7 @@ export class GameManagerV2 {
           : "") +
           'Click "⚔️ Join" to join this game with your default YAML.\n' +
           'Click "🛡️ Join with..." to join with a different YAML.\n' +
-          'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.'
+          'The host can then click "🚀 Launch" to start, or "🚪 Cancel" to cancel.',
       )
       .setFields(playersField)
       .setColor("Gold")
@@ -249,7 +249,7 @@ export class GameManagerV2 {
       userId: string,
       code: string,
       subInt: ButtonInteraction | StringSelectMenuInteraction,
-      isDefault = false
+      isDefault = false,
     ) => {
       let olderYaml = false;
       const yamlVer = await YamlManager.GetYamlVersionByCode(code);
@@ -311,10 +311,10 @@ export class GameManagerV2 {
           case 1: // the YAML is newer than the current AP version
             subInt.reply(
               `This YAML is for Archipelago version ${yamlVer.join(
-                "."
+                ".",
               )}, which is newer than the Archipelago version in use (${apVer.join(
-                "."
-              )}). This would cause generation to fail. Please select a different YAML.`
+                ".",
+              )}). This would cause generation to fail. Please select a different YAML.`,
             );
             return false;
         }
@@ -327,7 +327,7 @@ export class GameManagerV2 {
         }.${
           olderYaml
             ? ` Please be advised that this YAML is for an older version of Archipelago (${yamlVer?.join(
-                "."
+                ".",
               )}), which may cause generation issues.`
             : ""
         }`,
@@ -339,14 +339,14 @@ export class GameManagerV2 {
           `${subInt.user.username}#${
             subInt.user.discriminator
           } is using YAML ${code}, which is for an older version (${yamlVer.join(
-            "."
-          )})`
+            ".",
+          )})`,
         );
       else
         console.debug(
           `Adding ${isDefault ? "default " : ""}YAML ${code} for ${
             subInt.user.username
-          }#${subInt.user.discriminator}`
+          }#${subInt.user.discriminator}`,
         );
       launchBtn.setDisabled(this.yamlCount === 0);
       UpdatePlayers();
@@ -407,13 +407,13 @@ export class GameManagerV2 {
                 .addOptions([...(await yamlMgr.GetYamlOptionsV3(states))]);
 
               console.debug(
-                `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`
+                `${subInt.user.username}#${subInt.user.discriminator} is requesting YAML list`,
               );
               subInt.reply({
                 content: "Select a YAML to play.",
                 components: [
                   new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-                    yamlList
+                    yamlList,
                   ),
                 ],
                 ephemeral: true,
@@ -472,7 +472,7 @@ export class GameManagerV2 {
           msg.edit({ components: [buttonRow] });
 
           console.debug(
-            `Adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`
+            `Adding ${subInt.values[0]} for ${subInt.user.username}#${subInt.user.discriminator}`,
           );
           //addYaml(subInt.user.id, subInt.values[0]);
           addYamlSafe(subInt.user.id, subInt.values[0], subInt);
@@ -501,7 +501,7 @@ export class GameManagerV2 {
               const yamlMgr = new YamlManager(this._client, user.id);
               const [code] = await yamlMgr.AddYamls(retval[0]);
               user.send(
-                `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`
+                `The YAML you sent for game ${this.code} in ${msg.guild?.name} has been added to your library and will be used in that game.`,
               );
               addYaml(user.id, code);
               autorestart = true;
@@ -509,13 +509,13 @@ export class GameManagerV2 {
             break;
           case "yamlerror":
             user.send(
-              `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`
+              `There was a problem parsing YAMLs for game ${this.code} in ${msg.guild?.name}: ${retval[0].error}\nPlease review the error and try again.`,
             );
             autorestart = true;
             break;
           case "notyaml":
             user.send(
-              `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`
+              `The YAML you sent for game ${this.code} in ${msg.guild?.name} doesn't appear to be valid. Please check your submission and try again.`,
             );
             autorestart = true;
             break;
@@ -549,7 +549,7 @@ export class GameManagerV2 {
       for (const yaml of this._players[user]) incomingYamls.push([user, yaml]);
 
     const writeMsg = (
-      msgContent: string | MessagePayload | InteractionReplyOptions
+      msgContent: string | MessagePayload | InteractionReplyOptions,
     ) => interaction.followUp(msgContent);
 
     const outputPath = pathJoin("./games", this._code);
@@ -559,7 +559,7 @@ export class GameManagerV2 {
     await MkdirIfNotExist(yamlPath);
 
     const playerYamlList = await YamlManager.GetYamlsByCode(
-      ...incomingYamls.map((i) => i[1])
+      ...incomingYamls.map((i) => i[1]),
     );
     //console.debug(incomingYamls, playerYamlList);
 
@@ -567,9 +567,9 @@ export class GameManagerV2 {
       playerYamlList.map((i) =>
         copyFile(
           pathJoin("yamls", i.userId, `${i.filename}.yaml`),
-          pathJoin(yamlPath, `${i.filename}.yaml`)
-        )
-      )
+          pathJoin(yamlPath, `${i.filename}.yaml`),
+        ),
+      ),
     );
 
     this.state = GameState.Generating;
@@ -584,16 +584,16 @@ export class GameManagerV2 {
           "--outputpath",
           pathResolve(outputPath),
         ],
-        { cwd: AP_PATH, windowsHide: true }
+        { cwd: AP_PATH, windowsHide: true },
       );
       let outData = "";
       let errData = "";
 
       const logout = createWriteStream(
-        pathJoin(outputPath, `${this._code}-gen.stdout.log`)
+        pathJoin(outputPath, `${this._code}-gen.stdout.log`),
       );
       const logerr = createWriteStream(
-        pathJoin(outputPath, `${this._code}-gen.stderr.log`)
+        pathJoin(outputPath, `${this._code}-gen.stderr.log`),
       );
       let errTimeout: NodeJS.Timeout | undefined = undefined;
 
@@ -606,7 +606,7 @@ export class GameManagerV2 {
         if (itemCount && this._msg)
           this._msg.edit(
             this._msg.content +
-              ` This multiworld will have **${itemCount[1]} items**.`
+              ` This multiworld will have **${itemCount[1]} items**.`,
           );
 
         if (dataStr.includes("press enter to install it"))
@@ -664,7 +664,7 @@ export class GameManagerV2 {
             const spoilerData = i.getData();
             const spoilerDataString = spoilerData.toString();
             const playerCountResult = /Players:\s+(\d+)/.exec(
-              spoilerDataString
+              spoilerDataString,
             );
             const playerCount = playerCountResult
               ? Number.parseInt(playerCountResult[1])
@@ -750,9 +750,14 @@ export class GameManagerV2 {
         writeMsg({
           content: "An error occurred during game generation.",
           files: [
-            new AttachmentBuilder(readFileSync(pathJoin("games", this._code, `${this._code}-gen.stderr.log`)), {
-              name: `stderr.log`,
-            }),
+            new AttachmentBuilder(
+              readFileSync(
+                pathJoin("games", this._code, `${this._code}-gen.stderr.log`),
+              ),
+              {
+                name: `stderr.log`,
+              },
+            ),
           ],
         });
         this.state = GameState.GenerationFailed;
@@ -810,7 +815,7 @@ export class GameManagerV2 {
         {
           name: "Host",
           value: userMention(this._hostId),
-        }
+        },
       )
       .setTimestamp(Date.now())
       .setFooter({
@@ -856,15 +861,15 @@ export class GameManagerV2 {
                 value: "exit",
                 label: "Close server",
                 description: "Closes the server.",
-              }
-            )
+              },
+            ),
         ),
       ],
     });
 
     const gamePath = pathJoin("./games", this._code);
     const logout = createWriteStream(
-      pathJoin(gamePath, `${this._filename}.stdout.log`)
+      pathJoin(gamePath, `${this._filename}.stdout.log`),
     );
 
     const lastFiveLines: string[] = [];
@@ -912,7 +917,7 @@ export class GameManagerV2 {
         ];
     })();
     apErr?.pipe(
-      createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`))
+      createWriteStream(pathJoin(gamePath, `${this._filename}.stderr.log`)),
     );
     this.state = GameState.Running;
 
@@ -963,12 +968,12 @@ export class GameManagerV2 {
         .filter(
           (i) =>
             !/^Notice \(Player .* in team \d+\): Now that you are connected,/.test(
-              i
-            )
+              i,
+            ),
         );
       const includesCheck = newLines.reduce(
         (r, i) => r || /^\(Team #\d+\) .* sent .* to .*/.test(i),
-        false
+        false,
       );
       lastFiveLines.push(...newLines);
       while (lastFiveLines.length > 5) lastFiveLines.shift();
@@ -1001,8 +1006,8 @@ export class GameManagerV2 {
                 .setLabel(`Who would you like to ${event}?`)
                 .setCustomId("target")
                 .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-            )
+                .setStyle(TextInputStyle.Short),
+            ),
           );
 
         await subInt.showModal(modal);
@@ -1028,15 +1033,15 @@ export class GameManagerV2 {
                       .setLabel("Who would like a hint?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
+                      .setStyle(TextInputStyle.Short),
                   ),
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
                       .setLabel("Which item is it for?")
                       .setCustomId("item")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
-                  )
+                      .setStyle(TextInputStyle.Short),
+                  ),
                 );
 
               await subInt.showModal(modal);
@@ -1053,15 +1058,15 @@ export class GameManagerV2 {
                       .setLabel("Who would like an item?")
                       .setCustomId("target")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
+                      .setStyle(TextInputStyle.Short),
                   ),
                   new ActionRowBuilder<TextInputBuilder>().addComponents(
                     new TextInputBuilder()
                       .setLabel("Which item will they receive?")
                       .setCustomId("item")
                       .setRequired(true)
-                      .setStyle(TextInputStyle.Short)
-                  )
+                      .setStyle(TextInputStyle.Short),
+                  ),
                 );
 
               await subInt.showModal(modal);
@@ -1177,7 +1182,7 @@ export class GameManagerV2 {
    */
   static async fromCode(
     client: DiscordClient,
-    code: string
+    code: string,
   ): Promise<GameManagerV2> {
     return GameTable.findByPk(code).then((existingGame) => {
       if (existingGame)
@@ -1195,15 +1200,15 @@ export class GameManagerV2 {
    */
   static async NewGame(
     client: DiscordClient,
-    isTestGame = false
+    isTestGame = false,
   ): Promise<GameManagerV2> {
     return GameTable.findAll({ attributes: ["code"] }).then(
       (codeList) =>
         new GameManagerV2(
           client,
           GenerateLetterCode(codeList.map((i) => i.code)),
-          isTestGame
-        )
+          isTestGame,
+        ),
     );
   }
 

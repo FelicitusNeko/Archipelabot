@@ -125,7 +125,7 @@ export class YamlManager {
                 name: "AP ver",
                 value:
                   (await YamlManager.GetYamlVersionByCode(curEntry.code))?.join(
-                    "."
+                    ".",
                   ) ?? "Unknown",
                 inline: true,
               },
@@ -142,7 +142,7 @@ export class YamlManager {
           customId: "yaml",
           placeholder: "Select a YAML",
           options: (await this.GetYamlOptionsV3([])).map((i) => i.toJSON()),
-        })
+        }),
       );
     /** A component row containing buttons to manage individual YAMLs. */
     const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -160,7 +160,7 @@ export class YamlManager {
         customId: "deleteYaml",
         label: "Delete",
         style: ButtonStyle.Danger,
-      })
+      }),
     );
     /** The default starting state of the YAML manager. */
     const startingState = {
@@ -197,7 +197,7 @@ export class YamlManager {
             const worstState = YamlManager.GetWorstStatus(curEntry.games);
             (buttonRow.components[1] as ButtonBuilder).setDisabled(
               worstState > GameFunctionState.Playable ||
-                playerEntry?.defaultCode === curEntry.code
+                playerEntry?.defaultCode === curEntry.code,
             );
             subInt.update({
               content:
@@ -207,7 +207,7 @@ export class YamlManager {
               files: [
                 {
                   attachment: readFileSync(
-                    pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)
+                    pathJoin(this.yamlPath, `${curEntry.filename}.yaml`),
                   ),
                   name: `${this._user.username}-${curEntry.updatedAt
                     .toISOString()
@@ -232,12 +232,12 @@ export class YamlManager {
                   { defaultCode: curEntry.code },
                   {
                     where: { userId: curEntry.userId },
-                  }
+                  },
                 );
 
                 (buttonRow.components[1] as ButtonBuilder).setDisabled(true);
                 (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
-                  await this.GetYamlOptionsV3([])
+                  await this.GetYamlOptionsV3([]),
                 );
                 subInt.update({
                   content: "Your default YAML has been changed to this one.",
@@ -247,7 +247,7 @@ export class YamlManager {
                 subInt.update({
                   content: GetStdFunctionStateErrorMsg(
                     worstStatus,
-                    "as your default YAML"
+                    "as your default YAML",
                   ),
                 });
             }
@@ -267,7 +267,7 @@ export class YamlManager {
                     customId: "deleteYamlNo",
                     label: "No",
                     style: ButtonStyle.Secondary,
-                  })
+                  }),
                 ),
               ],
             });
@@ -279,13 +279,13 @@ export class YamlManager {
             await Promise.all([
               PlayerTable.update(
                 { defaultCode: null },
-                { where: { defaultCode: curEntry.code } }
+                { where: { defaultCode: curEntry.code } },
               ),
               unlink(pathJoin(this.yamlPath, `${curEntry.filename}.yaml`)),
             ]);
 
             (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
-              await this.GetYamlOptionsV3([])
+              await this.GetYamlOptionsV3([]),
             );
             curEntry = null;
             subInt.update(
@@ -298,7 +298,7 @@ export class YamlManager {
                   "The YAML has been deleted. You can now add more if you wish, or manage any remaining YAMLs.",
                 files: [],
                 embeds: [],
-              })
+              }),
             );
             break;
 
@@ -347,7 +347,7 @@ export class YamlManager {
             await this.UpdateYaml(curEntry.code, retval[0]);
             curEntry = await YamlTable.findByPk(curEntry.code);
             (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
-              await this.GetYamlOptionsV3([])
+              await this.GetYamlOptionsV3([]),
             );
             msg.edit({
               content: `Thanks! YAML has been updated.`,
@@ -356,7 +356,7 @@ export class YamlManager {
           } else {
             await this.AddYamls(...retval);
             (yamlRow.components[0] as StringSelectMenuBuilder).setOptions(
-              await this.GetYamlOptionsV3([])
+              await this.GetYamlOptionsV3([]),
             );
             msg.edit({
               content: `Thanks! Added ${retval.length} YAML(s) to your collection.`,
@@ -387,7 +387,7 @@ export class YamlManager {
           console.debug(
             "Message collector for YAML manager for user %s#%s has been closed.",
             this._user.username,
-            this._user.discriminator
+            this._user.discriminator,
           );
           break;
       }
@@ -423,7 +423,7 @@ export class YamlManager {
       await Promise.all([
         writeFile(
           pathJoin(this.yamlPath, `${yaml.msgId}-${index}.yaml`),
-          yaml.data
+          yaml.data,
         ),
         YamlTable.create({
           code,
@@ -465,7 +465,7 @@ export class YamlManager {
         },
         {
           where: { code },
-        }
+        },
       ),
     ]);
 
@@ -479,7 +479,7 @@ export class YamlManager {
    * @returns {Promise<SelectMenuOptionBuilder[]>} A promise that resolves into the list of available YAMLs, in {@link SelectMenuOptionBuilder} form.
    */
   public async GetYamlOptionsV3(
-    validStates: GameFunctionState[] = [GameFunctionState.Playable]
+    validStates: GameFunctionState[] = [GameFunctionState.Playable],
   ): Promise<StringSelectMenuOptionBuilder[]> {
     // BUG: more than 25 YAMLs breaks the dropdown
     const playerEntry =
@@ -493,12 +493,12 @@ export class YamlManager {
         .filter((i) =>
           validStates.length
             ? validStates.includes(YamlManager.GetWorstStatus(i.games))
-            : true
+            : true,
         )
         .map((i) => {
           const emoji = YamlManager.GetEmoji(
             i.games,
-            i.code === playerEntry.defaultCode
+            i.code === playerEntry.defaultCode,
           );
           let games = i.games.join(", ");
           if (games.length > 100) games = games.substring(0, 97) + "…";
@@ -511,7 +511,7 @@ export class YamlManager {
             value: i.code,
             emoji,
           });
-        })
+        }),
     );
 
     // HACK: truncate YAML list to last 25
@@ -537,7 +537,7 @@ export class YamlManager {
    */
   static async YamlListener(
     msg: DiscordMessage,
-    time?: number
+    time?: number,
   ): Promise<YamlListenerReturn> {
     const msgCollector = msg.channel.createMessageCollector({
       filter: (msgIn) =>
@@ -555,7 +555,7 @@ export class YamlManager {
     msgCollector.on("collect", (msgIn) => {
       user = msgIn.author;
       const yamls = msgIn.attachments.filter(
-        (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml")
+        (i) => i.name.endsWith(".yaml") || i.name.endsWith(".yml"),
       );
       if (yamls.size === 0) msg.edit("That wasn't a YAML! Please try again.");
       else {
@@ -593,7 +593,7 @@ export class YamlManager {
           reason === "gotyaml"
             ? "📫"
             : "📪" +
-                ` YAML listener closed with code ${reason} on msg id ${msg.id}`
+                ` YAML listener closed with code ${reason} on msg id ${msg.id}`,
         );
         f({
           reason,
@@ -638,7 +638,7 @@ export class YamlManager {
   static async CleanupYamls(interaction?: CommandInteraction) {
     const [yamlDb, yamlFiles] = await Promise.all([
       YamlTable.findAll().then((i) =>
-        i.map((ii) => pathJoin("yamls", ii.userId, `${ii.filename}.yaml`))
+        i.map((ii) => pathJoin("yamls", ii.userId, `${ii.filename}.yaml`)),
       ),
       readdir("yamls", { withFileTypes: true }).then((yamlDir) =>
         yamlDir
@@ -647,9 +647,9 @@ export class YamlManager {
             // TODO: redo this to use readdir promise
             readdirSync(pathJoin("yamls", yamlUserDir.name))
               .filter((yamlFile) => yamlFile.endsWith(".yaml"))
-              .map((yamlFile) => pathJoin("yamls", yamlUserDir.name, yamlFile))
+              .map((yamlFile) => pathJoin("yamls", yamlUserDir.name, yamlFile)),
           )
-          .flat()
+          .flat(),
       ),
     ]);
     /** The list of files that are in common between the database and the file store. */
@@ -705,11 +705,11 @@ export class YamlManager {
             ).map((i) => i.code),
           },
         },
-      }
+      },
     );
 
     interaction?.followUp(
-      `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s), and reset ${defaultsAffected} defaults.`
+      `Removed ${dbPrune} DB entry/ies, and ${filePrune} orphaned file(s), and reset ${defaultsAffected} defaults.`,
     );
   }
 
@@ -788,7 +788,7 @@ export class YamlManager {
       .then((yaml) => {
         if (!yaml) return null;
         return readFile(
-          pathJoin("yamls", yaml.userId, `${yaml.filename}.yaml`)
+          pathJoin("yamls", yaml.userId, `${yaml.filename}.yaml`),
         );
       })
       .then((file) => {

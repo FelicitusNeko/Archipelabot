@@ -64,7 +64,7 @@ YamlTable.init(
   {
     sequelize,
     tableName: "yaml",
-  }
+  },
 );
 
 interface PlayerAttributes {
@@ -100,7 +100,7 @@ PlayerTable.init(
   {
     sequelize,
     tableName: "players",
-  }
+  },
 );
 
 interface GameAttributes {
@@ -158,7 +158,7 @@ GameTable.init(
   {
     sequelize,
     tableName: "games",
-  }
+  },
 );
 
 sequelize.sync();

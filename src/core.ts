@@ -104,7 +104,7 @@ const GetGameList = (() => {
     const fileinfo = statSync("gamelist.json");
     if (fileinfo.mtime !== lastModified) {
       gameList = JSON.parse(
-        readFileSync("gamelist.json").toString()
+        readFileSync("gamelist.json").toString(),
       ) as GameList;
       lastModified = fileinfo.mtime;
     }
@@ -198,7 +198,7 @@ const ContainsSupportGames = (...games: string[]) => {
 const GetGameFunctionState = (game: string): GameFunctionState => {
   for (const [category, list] of Object.entries(GetGameList()) as [
     string,
-    string[]
+    string[],
   ][]) {
     if (list.includes(game))
       switch (category) {
@@ -237,7 +237,7 @@ const QuickValidateYaml = (data: string) => {
         console.warn(
           `Parsing as YAML failed: ${
             (e as Error).message
-          }\nTrying to parse as JSON instead`
+          }\nTrying to parse as JSON instead`,
         );
         return JSON.parse(data);
       }
@@ -246,7 +246,7 @@ const QuickValidateYaml = (data: string) => {
     const ValidateName = (name: string) => {
       const parsedName = name.replace(
         /\{[player|PLAYER|number|NUMBER]\}/,
-        "###"
+        "###",
       );
       if (parsedName.length > 16) throw new Error("Name too long");
       if (parsedName.length === 0) throw new Error("Name is zero-length");
@@ -323,9 +323,9 @@ const isPortAvailable = (port: number) => {
                   .split("\n")
                   .slice(4)
                   .map((i) =>
-                    Number.parseInt(i.trim().split(/\s+/)[1].split(":")[1])
+                    Number.parseInt(i.trim().split(/\s+/)[1].split(":")[1]),
                   )
-                  .includes(port)
+                  .includes(port),
               );
             } else r(new Error(`netstat returned with code: ${code}`));
           });
@@ -356,7 +356,7 @@ const isPortAvailable = (port: number) => {
  */
 const GenerateLetterCode = (
   checkAgainst: string[] = [],
-  length = 4
+  length = 4,
 ): string => {
   let retval = "";
 
@@ -364,7 +364,7 @@ const GenerateLetterCode = (
     retval = "";
     for (let x = 0; x < length; x++)
       retval += String.fromCharCode(
-        Math.floor(Math.random() * 26) + "A".charCodeAt(0)
+        Math.floor(Math.random() * 26) + "A".charCodeAt(0),
       );
   } while (checkAgainst.includes(retval));
 
@@ -373,7 +373,7 @@ const GenerateLetterCode = (
 
 const GetStdFunctionStateErrorMsg = (
   reason: GameFunctionState,
-  cannotBeUsed: string
+  cannotBeUsed: string,
 ) => {
   switch (reason) {
     case GameFunctionState.Playable:
