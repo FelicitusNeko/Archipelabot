@@ -34,10 +34,10 @@
     "@types/node": "^18",
     "@types/prettier": "^2",
     "@types/validator": "^13.7.0",
-    "@typescript-eslint/eslint-plugin": "^5.33.0",
-    "@typescript-eslint/parser": "^5.33.0",
+    "@typescript-eslint/eslint-plugin": "^6.8.0",
+    "@typescript-eslint/parser": "^6.8.0",
     "@yarnpkg/sdks": "^3.0.0-rc.53",
-    "eslint": "^8.22.0",
+    "eslint": "^8.52.0",
     "prettier": "^2.7.1"
   },
   "resolutions": {
