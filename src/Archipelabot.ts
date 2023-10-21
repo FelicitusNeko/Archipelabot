@@ -432,7 +432,11 @@ export class Archipelabot {
                 if (yamls.size === 0)
                   msg.edit("That wasn't a YAML! Please try again.");
                 else {
-                  Promise.all(yamls.map((i) => GetFile(i.url)))
+                  Promise.all(
+                    yamls
+                      .map((i) => new URL(i.url))
+                      .map((i) => GetFile(`${i.origin}${i.pathname}`)), // because fuck tracking tags
+                  )
                     .then(async (i) => {
                       const validate = QuickValidateYaml(i[0]);
                       if (!validate.error) {

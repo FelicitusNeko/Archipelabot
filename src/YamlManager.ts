@@ -559,7 +559,11 @@ export class YamlManager {
       );
       if (yamls.size === 0) msg.edit("That wasn't a YAML! Please try again.");
       else {
-        Promise.all(yamls.map((i) => GetFile(i.url)))
+        Promise.all(
+          yamls
+            .map((i) => new URL(i.url))
+            .map((i) => GetFile(`${i.origin}${i.pathname}`)), // because fuck tracking tags
+        )
           .then(async (yamlList) => {
             running = false;
             //console.debug(yamlList);
