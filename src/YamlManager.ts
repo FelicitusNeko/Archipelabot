@@ -735,12 +735,12 @@ export class YamlManager {
    * @static
    * @param games The list of games to evaluate.
    * @param markDefault Whether to use the ⚔️ emoji to denote the user's default YAML.
-   * @returns {string} The emoji to use for this YAML, if any.
+   * @returns {string|undefined} The emoji to use for this YAML, or `undefined` if none.
    */
-  static GetEmoji(games: string[], markDefault = false): string {
+  static GetEmoji(games: string[], markDefault = false): string|undefined {
     switch (YamlManager.GetWorstStatus(games)) {
       case GameFunctionState.Playable:
-        return markDefault ? "⚔️" : "";
+        return markDefault ? "⚔️" : undefined;
       case GameFunctionState.Testing:
         return "🧪";
       case GameFunctionState.Broken:
@@ -780,7 +780,7 @@ export class YamlManager {
    * @returns {Promise<string>} A promise that resolves into the emoji to use for this YAML, if any.
    *  If no YAML is found for the given code, returns ❓.
    */
-  static async GetEmojiByCode(code: string): Promise<string> {
+  static async GetEmojiByCode(code: string): Promise<string|undefined> {
     return YamlTable.findByPk(code).then((yaml) => {
       if (!yaml) return "❓";
       return YamlManager.GetEmoji(yaml.games);
