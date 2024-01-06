@@ -1,5 +1,5 @@
 {
-  "version": [0, 4, 3],
+  "version": [0, 4, 4],
   "games": [
     "A Link to the Past",
     "Factorio",
@@ -42,7 +42,14 @@
     "DOOM 1993",
     "Bumper Stickers",
     "Terraria",
-    "Undertale"
+    "Undertale",
+    "Lingo",
+    "Pokemon Emerald",
+    "DOOM II",
+    "Shivers",
+    "Heretic",
+    "Landstalker",
+    "Final Fantasy Mystic Quest"
   ],
   "testgames": [],
   "upcoming": [],
