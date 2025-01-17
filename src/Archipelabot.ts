@@ -165,7 +165,7 @@ export class Archipelabot {
     );
 
     this._client.once("ready", () => {
-      console.log(`${client.user?.username} is online`);
+      console.log(`${client.user?.username} is online and running in ${client.guilds.cache.size} server(s)`);
       client.application?.commands.set(this._cmds);
     });
 
