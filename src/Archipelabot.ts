@@ -26,9 +26,9 @@ import { readdir, readFile, writeFile } from "fs/promises";
 import { basename, join as pathJoin } from "path";
 
 import { PlayerTable, YamlTable } from "./Sequelize";
-import { BotConf } from "./defs";
 import * as botConf from "./botconf.json";
 import {
+  BotConf,
   Command,
   GameState,
   GenerateLetterCode,

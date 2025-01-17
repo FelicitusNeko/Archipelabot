@@ -12,6 +12,15 @@ import * as YAML from "yaml";
 
 import { YamlManager } from "./YamlManager";
 
+export interface BotConf {
+  discord: {
+    token: string;
+  };
+
+  clientId: string;
+  guildId: string;
+}
+
 /** The current state of a given AP session. */
 export enum GameState {
   /** The game data has been loaded into the game manager. */
