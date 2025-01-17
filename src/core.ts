@@ -18,7 +18,7 @@ export enum GameState {
   Ready,
   /** Players are assembling into this game. */
   Assembling,
-  /** YAMLs are being gathered for this game. */
+  /** @deprecated YAML collection now happens during the `Assembling` phase. */
   GatheringYAMLs,
   /** The game is being generated. */
   Generating,
