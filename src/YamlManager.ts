@@ -561,8 +561,7 @@ export class YamlManager {
       else {
         Promise.all(
           yamls
-            .map((i) => new URL(i.url))
-            .map((i) => GetFile(`${i.origin}${i.pathname}`)), // because fuck tracking tags
+            .map((i) => GetFile(i.url)) // because it won't work anymore without the fucking tracking tags
         )
           .then(async (yamlList) => {
             running = false;
