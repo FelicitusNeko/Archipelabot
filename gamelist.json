@@ -1,5 +1,5 @@
 {
-  "version": [0, 4, 4],
+  "version": [0, 5, 1],
   "games": [
     "A Link to the Past",
     "Factorio",
@@ -48,11 +48,35 @@
     "DOOM II",
     "Shivers",
     "Heretic",
-    "Landstalker",
-    "Final Fantasy Mystic Quest"
+    "Landstalker - The Treasures of King Nole",
+    "Final Fantasy Mystic Quest",
+    "TUNIC",
+    "Kirby's Dream Land 3",
+    "Celeste 64",
+    "Zork Grand Inquisitor",
+    "Castlevania 64",
+    "A Short Hike",
+    "Yoshi's Island",
+    "A Hat in Time",
+    "Aquaria",
+    "Bomb Rush Cyberfunk",
+    "Mario & Luigi Superstar Saga",
+    "Yu-Gi-Oh! 2006",
+    "DLCQuest",
+    "Kingdom Hearts",
+    "Mega Man 2",
+    "Yacht Dice",
+    "Old School Runescape"
   ],
-  "testgames": [],
+  "testgames": [
+    "Astalon",
+    "Symphony of the Night",
+    "Donkey Kong Country 2"
+  ],
   "upcoming": [],
+  "broken": [
+    "A Link Between Worlds"
+  ],
   "support": ["ChecksFinder", "ArchipIDLE", "Clique"],
   "specialHandling": ["Sudoku"]
 }
