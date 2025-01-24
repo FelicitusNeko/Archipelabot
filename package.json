@@ -1,0 +1,28 @@
+{
+  "name": "archipelabot",
+  "version": "0.10.0",
+  "description": "Manages Archipelago instances and required YAML config files over Discord.",
+  "main": "./dist/index.js",
+  "author": "Kewlio",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "sequelize": "^6.37.5",
+    "sqlite3": "^5.1.7",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0",
+    "@yarnpkg/sdks": "^3.2.0",
+    "tsc": "^2.0.4",
+    "typescript": "^5.7.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node -r dotenv/config ./dist/index.js"
+  },
+  "packageManager": "yarn@4.6.0"
+}

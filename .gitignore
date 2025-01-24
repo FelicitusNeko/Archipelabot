@@ -1,0 +1,22 @@
+# Environment
+.vscode/
+dist/
+**/*.code-workspace
+.env
+
+# Yarn
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# APbot files
+yamls/
+games/
+apbot.sqlite
+
+# Work files
+test/
+scratch/
