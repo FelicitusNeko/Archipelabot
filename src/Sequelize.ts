@@ -110,14 +110,14 @@ interface GameAttributes {
   guildId: string;
   userId: string;
   filename: string;
-  active: boolean;
+  status: number;
 }
 class GameTable extends Model<GameAttributes, GameAttributes> {
   public code!: string;
   public guildId!: string;
   public userId!: string;
   public filename!: string;
-  public active!: boolean;
+  public status!: number;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -151,10 +151,10 @@ GameTable.init(
       type: DataTypes.STRING(64),
       allowNull: false,
     },
-    active: {
-      type: DataTypes.BOOLEAN,
+    status: {
+      type: DataTypes.SMALLINT,
       allowNull: false,
-      defaultValue: true,
+      defaultValue: 0,
     },
   },
   {
