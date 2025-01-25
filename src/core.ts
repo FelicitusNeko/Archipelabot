@@ -13,15 +13,16 @@ import { resolve } from "path";
 enum GameState {
   /** The game data has been loaded into the game manager. */
   Ready,
+  
   /** Players are assembling into this game. */
-  Assembling,
+  Assembling = 100,
   /** The game is being generated. */
   Generating,
   /** The game is running. */
   Running,
 
   /** The game server has been stopped. */
-  Stopped = 100,
+  Stopped = 200,
   /** The game has failed to generate. */
   GenerationFailed,
   /** The game was cancelled, either manually or due to lack of players. */
