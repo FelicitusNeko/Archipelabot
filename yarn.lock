@@ -322,7 +322,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:20":
+"@types/node@npm:^20":
   version: 20.17.16
   resolution: "@types/node@npm:20.17.16"
   dependencies:
@@ -578,7 +578,7 @@ __metadata:
   dependencies:
     "@types/adm-zip": "npm:^0"
     "@types/debug": "npm:^4"
-    "@types/node": "npm:20"
+    "@types/node": "npm:^20"
     "@yarnpkg/sdks": "npm:^3.2.0"
     adm-zip: "npm:^0.5.16"
     debug: "npm:^4.4.0"
