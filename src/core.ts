@@ -10,22 +10,22 @@ import { get } from "https";
 import { resolve } from "path";
 
 /** The current state of a given AP session. */
-enum GameState {
-  /** The game data has been loaded into the game manager. */
+enum SessionState {
+  /** The session data has been loaded into the game manager. */
   Ready,
-  
-  /** Players are assembling into this game. */
+
+  /** Players are assembling into this session. */
   Assembling = 100,
-  /** The game is being generated. */
+  /** The session is being generated. */
   Generating,
-  /** The game is running. */
+  /** The session is running. */
   Running,
 
-  /** The game server has been stopped. */
+  /** The multiworld server for this session has been stopped. */
   Stopped = 200,
-  /** The game has failed to generate. */
+  /** The session has failed to generate. */
   GenerationFailed,
-  /** The game was cancelled, either manually or due to lack of players. */
+  /** The session was cancelled, either manually or due to lack of players. */
   Cancelled,
 }
 
@@ -194,8 +194,8 @@ const GenerateLetterCode = (
 };
 
 export {
-  GameState,
-  GameFlags as GameFunctionState,
+  SessionState,
+  GameFlags,
   VersionSpec,
   BotCommand,
   GameList,

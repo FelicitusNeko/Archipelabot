@@ -105,14 +105,14 @@ PlayerTable.init(
   }
 );
 
-interface GameAttributes {
+interface SessionAttributes {
   code: string;
   guildId: string;
   userId: string;
   filename: string;
   status: number;
 }
-class GameTable extends Model<GameAttributes, GameAttributes> {
+class SessionTable extends Model<SessionAttributes, SessionAttributes> {
   public code!: string;
   public guildId!: string;
   public userId!: string;
@@ -122,7 +122,7 @@ class GameTable extends Model<GameAttributes, GameAttributes> {
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
-GameTable.init(
+SessionTable.init(
   {
     code: {
       type: DataTypes.STRING(4),
@@ -166,4 +166,4 @@ GameTable.init(
 sequelize.sync();
 
 export default sequelize;
-export { YamlTable, PlayerTable, GameTable };
+export { YamlTable, PlayerTable, SessionTable };
